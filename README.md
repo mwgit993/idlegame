@@ -1,6 +1,6 @@
 # Udderly Idle (working title)
 
-An idle game about milking a cow and growing a dairy empire, made in **Godot 4.7** (640x360 pixel art, integer-scaled). Everything — the cow, the farm, the icons and the sound effects — is generated in code at startup; the only asset file is the bitmap font.
+An idle game about milking a cow and growing a dairy empire, made in **Godot 4.7** (640x360 pixel art, integer-scaled). Everything is generated in code at startup: the cow, the farm, the icons, the sound effects (including a real-sounding moo and a squishy milking squeeze) and the bouncy barnyard background music. The only asset file is the font.
 
 ## How it plays
 - **Milk the cow.** Click her (or press `Space` / `Enter` / controller `A`) to squeeze the udder. Every squeeze earns money.
