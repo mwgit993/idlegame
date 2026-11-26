@@ -1,446 +1,458 @@
 extends Node
 
-# Every sprite in the game, painted in code at startup (no image files besides the font).
-# Look one up with Art.tex("name"). Names: cow_idle, cow_blink, cow_squeeze, farm_bg,
-# icon_<business id>, coin, bell, farmhand, lock.
+# The cartoon art kit: the palette, vector shape helpers and every icon in the game, drawn
+# with Godot's vector API (polygons, circles and thick antialiased lines). Nothing is baked
+# into image files or textures. Draw an icon from any draw callback with
+#   Art.draw_icon(canvas_item, "name", center, size)
+# Icon names: the business ids (pail, churn, cheese, icecream, yogurt, diner, cosmic, moon)
+# plus coin, bell (the golden cowbell), farmhand, drop and star. Unknown names warn and draw
+# the coin. The cow is in scripts/cow.gd and the farm background in scripts/farm_scene.gd.
+#
+# (The file kept its old name, pixel_art.gd, so the autoload line in project.godot didn't
+# have to change.)
 
-const OUTLINE: Color = Color("#1b1a26")
-const WHITE: Color = Color("#f6f3ea")
-const SHADE: Color = Color("#d9d3c6")
-const SPOT: Color = Color("#24222e")
-const PINK: Color = Color("#f4a6b8")
-const PINK_DARK: Color = Color("#d9768f")
+const INK: Color = Color("#2b1e1a")          # thick cartoon outlines
+const WHITE: Color = Color("#fffdf6")
+const BARN: Color = Color("#e2463a")
+const BARN_DARK: Color = Color("#a72a22")
+const GOLD: Color = Color("#ffcc2e")
+const GOLD_DARK: Color = Color("#d99100")
+const PINK: Color = Color("#ff9cc0")
+const PINK_DARK: Color = Color("#e0628c")
 
-const BAYER4: Array[int] = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]
+const ICONS: Array[String] = [
+	"pail", "churn", "cheese", "icecream", "yogurt", "diner", "cosmic", "moon",
+	"coin", "bell", "farmhand", "drop", "star",
+]
+const LW: float = 2.2  # icon outline width, in the 32-unit icon box
+const WGHT_TAG: int = 0x77676874  # OpenType 'wght' axis
 
-var _cache: Dictionary = {}
+var font_bold: FontVariation
 
 
 func _ready() -> void:
-	_build_all()
+	var ttf: FontFile = load("res://assets/fonts/Fredoka-Variable.ttf") as FontFile
+	font_bold = FontVariation.new()
+	font_bold.base_font = ttf
+	font_bold.variation_opentype = {WGHT_TAG: 700}
 
 
-func tex(key: String) -> Texture2D:
-	if _cache.has(key):
-		return _cache[key]
-	push_warning("Art.tex: unknown texture '%s'" % key)
-	return _cache.get("coin", null)
-
-
-func _build_all() -> void:
-	_cache["cow_idle"] = _tex(_paint_cow(false, false))
-	_cache["cow_blink"] = _tex(_paint_cow(true, false))
-	_cache["cow_squeeze"] = _tex(_paint_cow(false, true))
-	_cache["farm_bg"] = _tex(_paint_farm(230, 330))
-	_cache["icon_pail"] = _tex(_icon_pail())
-	_cache["icon_churn"] = _tex(_icon_churn())
-	_cache["icon_cheese"] = _tex(_icon_cheese())
-	_cache["icon_icecream"] = _tex(_icon_icecream())
-	_cache["icon_yogurt"] = _tex(_icon_yogurt())
-	_cache["icon_diner"] = _tex(_icon_shake())
-	_cache["icon_cosmic"] = _tex(_icon_rocket())
-	_cache["icon_moon"] = _tex(_icon_moon())
-	_cache["coin"] = _tex(_icon_coin())
-	_cache["bell"] = _tex(_icon_bell())
-	_cache["farmhand"] = _tex(_icon_farmhand())
-	_cache["lock"] = _tex(_icon_lock())
+func has_icon(id: String) -> bool:
+	return id in ICONS
 
 
 # =========================================================================================
-# HELPERS
+# SHAPE HELPERS. Points are PackedVector2Arrays in the caller's coordinates.
 # =========================================================================================
-func _tex(img: Image) -> ImageTexture:
-	return ImageTexture.create_from_image(img)
+func ellipse(c: Vector2, rx: float, ry: float, rot: float = 0.0, n: int = 32) -> PackedVector2Array:
+	var pts: PackedVector2Array = PackedVector2Array()
+	pts.resize(n)
+	var cr: float = cos(rot)
+	var sr: float = sin(rot)
+	for i: int in range(n):
+		var a: float = TAU * float(i) / float(n)
+		var x: float = cos(a) * rx
+		var y: float = sin(a) * ry
+		pts[i] = c + Vector2(x * cr - y * sr, x * sr + y * cr)
+	return pts
 
 
-func _img(w: int, h: int) -> Image:
-	var img: Image = Image.create(w, h, false, Image.FORMAT_RGBA8)
-	img.fill(Color(0, 0, 0, 0))
-	return img
+# A squarish ellipse (e > 2 gets boxier): good for marshmallow-round bodies.
+func superellipse(c: Vector2, rx: float, ry: float, e: float, n: int = 48) -> PackedVector2Array:
+	var pts: PackedVector2Array = PackedVector2Array()
+	pts.resize(n)
+	var k: float = 2.0 / e
+	for i: int in range(n):
+		var a: float = TAU * float(i) / float(n)
+		var ca: float = cos(a)
+		var sa: float = sin(a)
+		pts[i] = c + Vector2(rx * signf(ca) * pow(absf(ca), k), ry * signf(sa) * pow(absf(sa), k))
+	return pts
 
 
-func _px(img: Image, x: int, y: int, c: Color) -> void:
-	if x >= 0 and y >= 0 and x < img.get_width() and y < img.get_height():
-		img.set_pixel(x, y, c)
+# A lumpy circle, for cow spots, bushes and splats.
+func blob(c: Vector2, r: float, phase: float, wobble: float = 0.18, n: int = 28) -> PackedVector2Array:
+	var pts: PackedVector2Array = PackedVector2Array()
+	pts.resize(n)
+	for i: int in range(n):
+		var a: float = TAU * float(i) / float(n)
+		var rr: float = r * (1.0 + wobble * sin(3.0 * a + phase) + wobble * 0.6 * sin(5.0 * a + phase * 1.7))
+		pts[i] = c + Vector2(cos(a), sin(a)) * rr
+	return pts
 
 
-func _rect(img: Image, x: int, y: int, w: int, h: int, c: Color) -> void:
-	for yy: int in range(y, y + h):
-		for xx: int in range(x, x + w):
-			_px(img, xx, yy, c)
+# Rounds every corner of a polygon (no sharp corners anywhere: cartoon-soft, and thick
+# outlines don't spike).
+func round_poly(pts: PackedVector2Array, radius: float, seg: int = 4) -> PackedVector2Array:
+	var out: PackedVector2Array = PackedVector2Array()
+	var n: int = pts.size()
+	for i: int in range(n):
+		var p: Vector2 = pts[i]
+		var da: Vector2 = pts[(i - 1 + n) % n] - p
+		var db: Vector2 = pts[(i + 1) % n] - p
+		var r: float = minf(radius, minf(da.length(), db.length()) * 0.49)
+		if r < 0.05:
+			out.append(p)
+			continue
+		var p1: Vector2 = p + da.normalized() * r
+		var p2: Vector2 = p + db.normalized() * r
+		for s: int in range(seg + 1):
+			var t: float = float(s) / float(seg)
+			out.append(p1.lerp(p, t).lerp(p.lerp(p2, t), t))
+	return out
 
 
-func _ellipse(img: Image, cx: float, cy: float, rx: float, ry: float, c: Color) -> void:
-	for y: int in range(int(floor(cy - ry)), int(ceil(cy + ry)) + 1):
-		for x: int in range(int(floor(cx - rx)), int(ceil(cx + rx)) + 1):
-			var dx: float = (float(x) + 0.5 - cx) / rx
-			var dy: float = (float(y) + 0.5 - cy) / ry
-			if dx * dx + dy * dy <= 1.0:
-				_px(img, x, y, c)
+func rrect(r: Rect2, radius: float, seg: int = 4) -> PackedVector2Array:
+	var pts: PackedVector2Array = PackedVector2Array([
+		r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)])
+	return round_poly(pts, radius, seg)
 
 
-# Paints c only where the image is already opaque (for spots and shading inside a shape).
-func _ellipse_on(img: Image, cx: float, cy: float, rx: float, ry: float, c: Color) -> void:
-	for y: int in range(int(floor(cy - ry)), int(ceil(cy + ry)) + 1):
-		for x: int in range(int(floor(cx - rx)), int(ceil(cx + rx)) + 1):
-			var dx: float = (float(x) + 0.5 - cx) / rx
-			var dy: float = (float(y) + 0.5 - cy) / ry
-			if dx * dx + dy * dy <= 1.0 and x >= 0 and y >= 0 and x < img.get_width() and y < img.get_height():
-				if img.get_pixel(x, y).a > 0.5:
-					img.set_pixel(x, y, c)
+func heart(c: Vector2, size: float, n: int = 36) -> PackedVector2Array:
+	var pts: PackedVector2Array = PackedVector2Array()
+	pts.resize(n)
+	var s: float = size / 34.0
+	for i: int in range(n):
+		var t: float = TAU * float(i) / float(n)
+		var x: float = 16.0 * pow(sin(t), 3.0)
+		var y: float = -(13.0 * cos(t) - 5.0 * cos(2.0 * t) - 2.0 * cos(3.0 * t) - cos(4.0 * t))
+		pts[i] = c + Vector2(x, y + 2.0) * s
+	return pts
 
 
-func _line(img: Image, x0: int, y0: int, x1: int, y1: int, c: Color) -> void:
-	var steps: int = maxi(absi(x1 - x0), absi(y1 - y0))
-	for s: int in range(steps + 1):
-		var t: float = 0.0 if steps == 0 else float(s) / float(steps)
-		_px(img, int(round(lerpf(float(x0), float(x1), t))), int(round(lerpf(float(y0), float(y1), t))), c)
+func star(c: Vector2, r_out: float, r_in: float, points: int = 5, rot: float = -PI / 2.0) -> PackedVector2Array:
+	var pts: PackedVector2Array = PackedVector2Array()
+	for i: int in range(points * 2):
+		var a: float = rot + PI * float(i) / float(points)
+		var r: float = r_out if i % 2 == 0 else r_in
+		pts.append(c + Vector2(cos(a), sin(a)) * r)
+	return pts
 
 
-# Adds a 1 px dark outline around everything opaque.
-func _outline(img: Image, c: Color = OUTLINE) -> void:
-	var w: int = img.get_width()
-	var h: int = img.get_height()
-	var src: Image = img.duplicate()
-	for y: int in range(h):
-		for x: int in range(w):
-			if src.get_pixel(x, y).a > 0.5:
-				continue
-			var near: bool = false
-			for o: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
-				var nx: int = x + o.x
-				var ny: int = y + o.y
-				if nx >= 0 and ny >= 0 and nx < w and ny < h and src.get_pixel(nx, ny).a > 0.5:
-					near = true
-					break
-			if near:
-				img.set_pixel(x, y, c)
+func teardrop(tip: Vector2, c: Vector2, r: float, n: int = 20) -> PackedVector2Array:
+	var d: Vector2 = tip - c
+	var dist: float = maxf(d.length(), r + 0.5)
+	var th: float = acos(r / dist)
+	var base: float = d.angle()
+	var pts: PackedVector2Array = PackedVector2Array([tip])
+	for i: int in range(n + 1):
+		var a: float = base + th + (TAU - 2.0 * th) * float(i) / float(n)
+		pts.append(c + Vector2(cos(a), sin(a)) * r)
+	return pts
 
 
-func _dither(x: int, y: int, t: float) -> bool:
-	return t * 16.0 > float(BAYER4[(y % 4) * 4 + (x % 4)])
+# Fill a polygon and give it a thick outline.
+func fill(ci: CanvasItem, pts: PackedVector2Array, col: Color, line: Color = INK, w: float = LW) -> void:
+	ci.draw_colored_polygon(pts, col)
+	if w > 0.0:
+		outline(ci, pts, line, w)
 
 
-# =========================================================================================
-# THE COW (side view, facing right). 170 x 120 px.
-# =========================================================================================
-func _paint_cow(blink: bool, squeeze: bool) -> Image:
-	var img: Image = _img(170, 124)
-	var spot_rng: RandomNumberGenerator = RandomNumberGenerator.new()
-	spot_rng.seed = 4242
-
-	# Far legs (shaded) behind the body.
-	_leg(img, 42, 78, SHADE)
-	_leg(img, 112, 78, SHADE)
-	# Tail.
-	for i: int in range(26):
-		_px(img, 18 - i / 6, 44 + i, OUTLINE)
-		_px(img, 19 - i / 6, 44 + i, OUTLINE)
-	_ellipse(img, 14.0, 72.0, 4.0, 6.0, SPOT)
-
-	# Body, neck and head.
-	_ellipse(img, 76.0, 58.0, 56.0, 30.0, WHITE)
-	_ellipse(img, 124.0, 50.0, 16.0, 20.0, WHITE)
-	_ellipse(img, 140.0, 40.0, 19.0, 16.0, WHITE)
-	# Belly shade.
-	for x: int in range(24, 130):
-		for y: int in range(74, 90):
-			if img.get_pixel(x, y).a > 0.5 and _dither(x, y, float(y - 74) / 18.0):
-				img.set_pixel(x, y, SHADE)
-	# Spots (only on the body).
-	var spots: Array[Vector4] = [
-		Vector4(44, 46, 15, 11), Vector4(78, 40, 12, 9), Vector4(100, 64, 14, 10),
-		Vector4(60, 70, 10, 7), Vector4(30, 64, 8, 9), Vector4(118, 44, 6, 8),
-	]
-	for sp: Vector4 in spots:
-		_ellipse_on(img, sp.x, sp.y, sp.z, sp.w, SPOT)
-		_ellipse_on(img, sp.x + sp.z * 0.5, sp.y - sp.w * 0.7, sp.z * 0.45, sp.w * 0.5, SPOT)
-	# Head patch over the eye.
-	_ellipse_on(img, 138.0, 32.0, 9.0, 8.0, SPOT)
-
-	# Near legs.
-	_leg(img, 30, 80, WHITE)
-	_leg(img, 98, 80, WHITE)
-
-	# Udder and teats.
-	var uy: float = 89.0 if not squeeze else 90.0
-	var ury: float = 9.0 if not squeeze else 7.0
-	_ellipse(img, 62.0, uy, 15.0, ury, PINK)
-	_ellipse_on(img, 58.0, uy - 3.0, 8.0, 3.0, Color("#f9c7d2"))
-	var teat_len: int = 7 if not squeeze else 10
-	for tx: int in [52, 59, 66, 73]:
-		_rect(img, tx, int(uy) + 5, 4, teat_len, PINK if tx % 2 == 0 else PINK_DARK)
-		_rect(img, tx + 1, int(uy) + 5 + teat_len - 1, 2, 1, PINK_DARK)
-
-	# Muzzle, nose, eye, ear, horns.
-	_ellipse(img, 154.0, 47.0, 11.0, 9.0, PINK)
-	_rect(img, 151, 45, 2, 3, PINK_DARK)
-	_rect(img, 158, 45, 2, 3, PINK_DARK)
-	_line(img, 150, 52, 158, 52, PINK_DARK)
-	_ellipse(img, 126.0, 30.0, 7.0, 4.0, SPOT)
-	_ellipse(img, 126.0, 30.0, 4.0, 2.0, PINK)
-	_rect(img, 134, 18, 3, 7, Color("#efe3b8"))
-	_rect(img, 146, 18, 3, 7, Color("#efe3b8"))
-	_px(img, 134, 17, Color("#efe3b8"))
-	_px(img, 148, 17, Color("#efe3b8"))
-
-	_outline(img)
-
-	if blink:
-		_line(img, 138, 37, 144, 37, OUTLINE)
-	else:
-		_rect(img, 139, 33, 5, 6, OUTLINE)
-		_rect(img, 140, 34, 2, 2, Color.WHITE)
-	# Rosy cheek.
-	_ellipse(img, 146.0, 44.0, 2.5, 1.5, Color("#f7b9c4"))
-	return img
+func outline(ci: CanvasItem, pts: PackedVector2Array, line: Color = INK, w: float = LW) -> void:
+	if pts.size() < 3:
+		return
+	var c: PackedVector2Array = pts.duplicate()
+	c.append(pts[0])
+	c.append(pts[1])
+	ci.draw_polyline(c, line, w, true)
 
 
-func _leg(img: Image, x: int, y: int, col: Color) -> void:
-	_rect(img, x, y, 11, 30, col)
-	_rect(img, x, y + 26, 11, 6, Color("#4a4048"))
-	_rect(img, x + 5, y + 28, 1, 4, OUTLINE)
+func circle(ci: CanvasItem, c: Vector2, r: float, col: Color, line: Color = INK, w: float = LW) -> void:
+	ci.draw_circle(c, r, col, true, -1.0, w <= 0.0)
+	if w > 0.0:
+		ci.draw_arc(c, r, 0.0, TAU, maxi(16, int(r * 2.5)), line, w, true)
+
+
+# A thick line with round caps.
+func stroke(ci: CanvasItem, pts: PackedVector2Array, col: Color, w: float) -> void:
+	ci.draw_polyline(pts, col, w, true)
+	ci.draw_circle(pts[0], w * 0.5, col, true, -1.0, true)
+	ci.draw_circle(pts[pts.size() - 1], w * 0.5, col, true, -1.0, true)
+
+
+# A thick line with a dark outline around it (tails, straws, handles, stems).
+func inked_stroke(ci: CanvasItem, pts: PackedVector2Array, col: Color, w: float, ow: float = LW) -> void:
+	stroke(ci, pts, INK, w + ow * 2.0)
+	stroke(ci, pts, col, w)
+
+
+func clip(a: PackedVector2Array, b: PackedVector2Array) -> Array[PackedVector2Array]:
+	var out: Array[PackedVector2Array] = []
+	for p: PackedVector2Array in Geometry2D.intersect_polygons(a, b):
+		if p.size() >= 3:
+			out.append(p)
+	return out
+
+
+# Text with a chunky dark outline (floaters, labels drawn in callbacks).
+func outlined_text(ci: CanvasItem, font: Font, pos: Vector2, text: String, size: int, col: Color,
+		outline_px: int = 4, line: Color = INK, width: float = -1.0, align: HorizontalAlignment = HORIZONTAL_ALIGNMENT_LEFT) -> void:
+	if outline_px > 0:
+		ci.draw_string_outline(font, pos, text, align, width, size, outline_px, line)
+	ci.draw_string(font, pos, text, align, width, size, col)
 
 
 # =========================================================================================
-# FARM BACKGROUND for the cow panel.
+# ICONS, designed in a 32 x 32 box centred on (0, 0).
 # =========================================================================================
-func _paint_farm(w: int, h: int) -> Image:
-	var img: Image = _img(w, h)
-	var sky_top: Color = Color("#5fb3ea")
-	var sky_bot: Color = Color("#c9ecfb")
-	var horizon: int = int(float(h) * 0.42)
-	for y: int in range(horizon + 20):
-		var t: float = float(y) / float(horizon + 20)
-		for x: int in range(w):
-			var c: Color = sky_top.lerp(sky_bot, t)
-			if _dither(x, y, fmod(t * 6.0, 1.0)):
-				c = sky_top.lerp(sky_bot, minf(1.0, t + 1.0 / 6.0))
-			img.set_pixel(x, y, c)
-	# Sun.
-	_ellipse(img, 190.0, 34.0, 15.0, 15.0, Color("#fff3a6"))
-	_ellipse(img, 190.0, 34.0, 11.0, 11.0, Color("#ffe066"))
-	# Clouds.
-	for cl: Vector3 in [Vector3(40, 30, 1.0), Vector3(130, 54, 0.8), Vector3(70, 86, 0.6)]:
-		var s: float = cl.z
-		_ellipse(img, cl.x, cl.y, 18.0 * s, 8.0 * s, Color.WHITE)
-		_ellipse(img, cl.x + 12.0 * s, cl.y - 5.0 * s, 12.0 * s, 8.0 * s, Color.WHITE)
-		_ellipse(img, cl.x - 12.0 * s, cl.y + 1.0, 10.0 * s, 6.0 * s, Color("#eef8ff"))
-	# Far hills.
-	for x: int in range(w):
-		var hy: int = horizon - int(10.0 + 8.0 * sin(float(x) * 0.035) + 5.0 * sin(float(x) * 0.09 + 1.0))
-		for y: int in range(hy, horizon + 30):
-			img.set_pixel(x, y, Color("#8fd07c") if y < hy + 2 else Color("#76bd67"))
-	# Barn.
-	var bx: int = 14
-	var by: int = horizon - 34
-	_rect(img, bx, by + 14, 56, 46, Color("#c23b32"))
-	for i: int in range(30):
-		_rect(img, bx - 2 + i, by + 14 - i / 2, 60 - i * 2, 1, Color("#9e2c25"))
-	_rect(img, bx + 18, by + 30, 20, 30, Color("#7a1f1a"))
-	_line(img, bx + 18, by + 30, bx + 37, by + 59, Color("#f6efe0"))
-	_line(img, bx + 37, by + 30, bx + 18, by + 59, Color("#f6efe0"))
-	_rect(img, bx + 18, by + 30, 20, 1, Color("#f6efe0"))
-	_rect(img, bx + 23, by + 18, 10, 8, Color("#f6efe0"))
-	_rect(img, bx + 24, by + 19, 8, 6, Color("#3d2a24"))
-	# Silo.
-	_rect(img, bx + 58, by + 2, 16, 58, Color("#b9c3cc"))
-	_ellipse(img, float(bx + 66), float(by + 2), 8.0, 6.0, Color("#8a96a1"))
-	for yy: int in range(by + 8, by + 60, 8):
-		_rect(img, bx + 58, yy, 16, 1, Color("#97a3ad"))
-	# Grass field.
-	var field_top: int = horizon + 18
-	for y: int in range(field_top, h):
-		var t2: float = float(y - field_top) / float(h - field_top)
-		for x: int in range(w):
-			var c2: Color = Color("#5cb85c").lerp(Color("#3f9a45"), t2)
-			if _dither(x, y, fmod(t2 * 5.0, 1.0)):
-				c2 = Color("#5cb85c").lerp(Color("#3f9a45"), minf(1.0, t2 + 0.2))
-			img.set_pixel(x, y, c2)
-	# Fence.
-	var fy: int = field_top + 4
-	for x: int in range(0, w, 22):
-		_rect(img, x + 4, fy - 14, 4, 18, Color("#8a5a35"))
-		_rect(img, x + 4, fy - 14, 4, 1, Color("#a97446"))
-	_rect(img, 0, fy - 10, w, 3, Color("#a97446"))
-	_rect(img, 0, fy - 3, w, 3, Color("#a97446"))
-	# Grass tufts and flowers.
-	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
-	rng.seed = 77
-	for i: int in range(90):
-		var gx: int = rng.randi_range(0, w - 1)
-		var gy: int = rng.randi_range(field_top + 8, h - 2)
-		_px(img, gx, gy, Color("#2f7d36"))
-		_px(img, gx + 1, gy - 1, Color("#2f7d36"))
-		_px(img, gx + 2, gy, Color("#2f7d36"))
-	for i: int in range(26):
-		var fx: int = rng.randi_range(0, w - 1)
-		var fy2: int = rng.randi_range(field_top + 10, h - 2)
-		var fc: Color = [Color("#ffffff"), Color("#ffe066"), Color("#ff9ec2")][i % 3]
-		_px(img, fx, fy2, fc)
-		_px(img, fx + 1, fy2, fc)
-		_px(img, fx, fy2 + 1, Color("#2f7d36"))
-	return img
+func draw_icon(ci: CanvasItem, id: String, center: Vector2, size: float, xf: Transform2D = Transform2D.IDENTITY) -> void:
+	var s: float = size / 32.0
+	ci.draw_set_transform_matrix(xf * Transform2D(0.0, Vector2(s, s), 0.0, center))
+	match id:
+		"pail":
+			_icon_pail(ci)
+		"churn":
+			_icon_churn(ci)
+		"cheese":
+			_icon_cheese(ci)
+		"icecream":
+			_icon_icecream(ci)
+		"yogurt":
+			_icon_yogurt(ci)
+		"diner":
+			_icon_shake(ci)
+		"cosmic":
+			_icon_rocket(ci)
+		"moon":
+			_icon_moon(ci)
+		"coin":
+			_icon_coin(ci)
+		"bell":
+			_icon_bell(ci)
+		"farmhand":
+			_icon_farmhand(ci)
+		"drop":
+			_icon_drop(ci)
+		"star":
+			_icon_star(ci)
+		_:
+			push_warning("Art.draw_icon: unknown icon '%s'" % id)
+			_icon_coin(ci)
+	ci.draw_set_transform_matrix(xf)
 
 
-# =========================================================================================
-# ICONS (28 x 28)
-# =========================================================================================
-func _icon_pail() -> Image:
-	var img: Image = _img(28, 28)
-	for y: int in range(9, 25):
-		var inset: int = (y - 9) / 4
-		_rect(img, 5 + inset, y, 18 - inset * 2, 1, Color("#aeb8c2") if y % 5 != 0 else Color("#8d99a6"))
-	_ellipse(img, 14.0, 9.5, 9.0, 2.5, Color("#ffffff"))
-	for i: int in range(19):
-		var a: float = PI + PI * float(i) / 18.0
-		_px(img, 14 + int(round(cos(a) * 10.0)), 9 + int(round(sin(a) * 7.0)), Color("#6b7580"))
-	_outline(img)
-	return img
+func _shine(ci: CanvasItem, a: Vector2, b: Vector2, w: float = 2.0) -> void:
+	stroke(ci, PackedVector2Array([a, b]), Color(1, 1, 1, 0.75), w)
 
 
-func _icon_churn() -> Image:
-	var img: Image = _img(28, 28)
-	_rect(img, 12, 1, 3, 10, Color("#c9a26b"))
-	_ellipse(img, 13.5, 2.0, 3.0, 2.0, Color("#c9a26b"))
-	for y: int in range(8, 26):
-		var bulge: int = 1 if y > 11 and y < 22 else 0
-		_rect(img, 7 - bulge, y, 14 + bulge * 2, 1, Color("#a8703c"))
-	_rect(img, 6, 12, 16, 2, Color("#5e3b1c"))
-	_rect(img, 6, 20, 16, 2, Color("#5e3b1c"))
-	_ellipse(img, 14.0, 8.0, 7.0, 2.0, Color("#ffe8a3"))
-	_outline(img)
-	return img
+func _icon_pail(ci: CanvasItem) -> void:
+	ci.draw_arc(Vector2(0, -3), 12.5, PI * 1.02, PI * 1.98, 20, INK, 4.6, true)
+	ci.draw_arc(Vector2(0, -3), 12.5, PI * 1.04, PI * 1.96, 20, Color("#8fa3b8"), 2.0, true)
+	var body: PackedVector2Array = round_poly(PackedVector2Array([
+		Vector2(-12.5, -4), Vector2(12.5, -4), Vector2(9.0, 14), Vector2(-9.0, 14)]), 2.5)
+	fill(ci, body, Color("#bcd0e2"))
+	for yy: float in [3.0, 10.0]:
+		var hw: float = lerpf(12.5, 9.0, (yy + 4.0) / 18.0) - 0.8
+		ci.draw_line(Vector2(-hw, yy), Vector2(hw, yy), Color("#7f97ae"), 1.8, true)
+	_shine(ci, Vector2(-7.5, 0), Vector2(-6.0, 10))
+	fill(ci, ellipse(Vector2(0, -4), 13.0, 3.8), Color("#dfe9f2"))
+	ci.draw_colored_polygon(ellipse(Vector2(0, -3.6), 10.4, 2.4), WHITE)
+	fill(ci, teardrop(Vector2(9.5, -6), Vector2(10.5, 1.5), 2.6), WHITE, INK, 1.6)
 
 
-func _icon_cheese() -> Image:
-	var img: Image = _img(28, 28)
-	for y: int in range(8, 24):
-		var w: int = 4 + (y - 8) * 3 / 2
-		_rect(img, 3, y, mini(22, w), 1, Color("#ffd23f"))
-	_rect(img, 3, 22, 22, 3, Color("#f0b429"))
-	for h: Vector3 in [Vector3(8, 17, 2.0), Vector3(15, 20, 2.0), Vector3(19, 22, 1.5), Vector3(6, 22, 1.2)]:
-		_ellipse(img, h.x, h.y, h.z, h.z, Color("#d99a1e"))
-	_outline(img)
-	return img
+func _icon_churn(ci: CanvasItem) -> void:
+	inked_stroke(ci, PackedVector2Array([Vector2(0, -15), Vector2(0, -6)]), Color("#e0b07a"), 2.6, 1.6)
+	circle(ci, Vector2(0, -15.5), 3.0, Color("#e0b07a"), INK, 1.8)
+	var body: PackedVector2Array = round_poly(PackedVector2Array([
+		Vector2(-8, -7), Vector2(8, -7), Vector2(10.5, 3), Vector2(8.5, 14), Vector2(-8.5, 14), Vector2(-10.5, 3)]), 3.0)
+	fill(ci, body, Color("#d68f4c"))
+	for yy: float in [-1.5, 9.0]:
+		var band: Array[PackedVector2Array] = clip(body, rrect(Rect2(-14, yy - 1.6, 28, 3.2), 0.5, 1))
+		for p: PackedVector2Array in band:
+			ci.draw_colored_polygon(p, Color("#7a4520"))
+	ci.draw_line(Vector2(-3, -4), Vector2(-3.5, 11), Color(1, 1, 1, 0.35), 1.6, true)
+	outline(ci, body)
+	fill(ci, ellipse(Vector2(0, -7), 8.6, 2.6), Color("#eab47a"))
+	# A pat of butter in front.
+	fill(ci, round_poly(PackedVector2Array([Vector2(3, 8), Vector2(15, 8), Vector2(15, 15), Vector2(3, 15)]), 1.8), Color("#ffe066"), INK, 1.8)
+	ci.draw_colored_polygon(rrect(Rect2(4.2, 9.2, 9.6, 1.8), 0.8, 2), Color("#fff5b8"))
 
 
-func _icon_icecream() -> Image:
-	var img: Image = _img(28, 28)
-	for y: int in range(14, 27):
-		var hw: int = (27 - y) / 2
-		_rect(img, 14 - hw, y, hw * 2, 1, Color("#e3a857") if (y % 3) != 0 else Color("#c98a3d"))
-	_ellipse(img, 14.0, 13.0, 7.0, 4.0, Color("#fff3e0"))
-	_ellipse(img, 14.0, 8.0, 6.0, 5.0, Color("#ff9ec2"))
-	_px(img, 12, 6, Color("#ffffff"))
-	_px(img, 16, 9, Color("#6ad1ff"))
-	_px(img, 11, 10, Color("#ffe066"))
-	_ellipse(img, 14.0, 2.5, 2.0, 2.0, Color("#e23b4b"))
-	_outline(img)
-	return img
+func _icon_cheese(ci: CanvasItem) -> void:
+	var top: PackedVector2Array = round_poly(PackedVector2Array([Vector2(-15, 1), Vector2(9, -11), Vector2(15, -3)]), 1.6)
+	var front: PackedVector2Array = round_poly(PackedVector2Array([
+		Vector2(-15, 1), Vector2(15, -3), Vector2(15, 10), Vector2(-15, 12)]), 1.8)
+	fill(ci, front, Color("#ffc22e"))
+	for h: Vector3 in [Vector3(-8, 6, 2.4), Vector3(1, 3, 1.8), Vector3(8, 6, 2.6), Vector3(-1, 9, 1.4)]:
+		ci.draw_circle(Vector2(h.x, h.y), h.z, Color("#e39a12"), true, -1.0, true)
+	fill(ci, top, Color("#ffe27a"))
+	ci.draw_circle(Vector2(5, -5), 2.0, Color("#f2c24a"), true, -1.0, true)
+	ci.draw_circle(Vector2(-4, -1), 1.4, Color("#f2c24a"), true, -1.0, true)
+	outline(ci, front)
 
 
-func _icon_yogurt() -> Image:
-	var img: Image = _img(28, 28)
-	for y: int in range(9, 26):
-		var inset: int = (y - 9) / 6
-		_rect(img, 6 + inset, y, 16 - inset * 2, 1, Color("#f6f3ea"))
-	_rect(img, 7, 14, 14, 6, Color("#ff9ec2"))
-	_rect(img, 9, 16, 10, 2, Color("#ffffff"))
-	_ellipse(img, 14.0, 9.0, 8.0, 2.0, Color("#e0d8c8"))
-	_line(img, 18, 2, 21, 10, Color("#aeb8c2"))
-	_ellipse(img, 17.5, 2.0, 1.5, 2.0, Color("#aeb8c2"))
-	_outline(img)
-	return img
+func _icon_icecream(ci: CanvasItem) -> void:
+	var cone: PackedVector2Array = round_poly(PackedVector2Array([Vector2(-8.5, 0), Vector2(8.5, 0), Vector2(0, 16)]), 2.0)
+	fill(ci, cone, Color("#eaaa5a"))
+	for k: int in range(-3, 4):
+		var o: float = float(k) * 4.5
+		for seg: PackedVector2Array in Geometry2D.intersect_polyline_with_polygon(
+				PackedVector2Array([Vector2(o - 10, -2), Vector2(o + 10, 18)]), cone):
+			ci.draw_polyline(seg, Color("#bf7a30"), 1.2, true)
+		for seg2: PackedVector2Array in Geometry2D.intersect_polyline_with_polygon(
+				PackedVector2Array([Vector2(o + 10, -2), Vector2(o - 10, 18)]), cone):
+			ci.draw_polyline(seg2, Color("#bf7a30"), 1.2, true)
+	outline(ci, cone)
+	var scoop: PackedVector2Array = blob(Vector2(0, -5), 9.5, 0.6, 0.05)
+	fill(ci, scoop, PINK)
+	var ruffle: PackedVector2Array = PackedVector2Array()
+	for i: int in range(13):
+		var x: float = lerpf(-10.5, 10.5, float(i) / 12.0)
+		ruffle.append(Vector2(x, 0.5 + (2.2 if i % 2 == 0 else 0.0)))
+	ruffle.append(Vector2(10.5, -3))
+	ruffle.append(Vector2(-10.5, -3))
+	fill(ci, round_poly(ruffle, 1.2, 2), PINK)
+	ci.draw_colored_polygon(rrect(Rect2(-9.5, -4, 19, 3.6), 1.0, 1), PINK)
+	fill(ci, teardrop(Vector2(5, -1), Vector2(5.5, 5), 1.8), PINK, INK, 1.6)
+	ci.draw_colored_polygon(ellipse(Vector2(-4, -9.5), 2.8, 1.6, -0.5), Color(1, 1, 1, 0.8))
+	var sprinkle_cols: Array[Color] = [Color("#6ad1ff"), Color("#ffe066"), Color("#7ccf4a"), WHITE]
+	var sp: Array[Vector3] = [Vector3(2, -10, 0.6), Vector3(5, -6, -0.4), Vector3(-2, -5, 1.2), Vector3(-6, -3.5, 0.2)]
+	for i: int in range(sp.size()):
+		var d: Vector2 = Vector2(cos(sp[i].z), sin(sp[i].z)) * 1.3
+		stroke(ci, PackedVector2Array([Vector2(sp[i].x, sp[i].y) - d, Vector2(sp[i].x, sp[i].y) + d]), sprinkle_cols[i], 1.4)
+	ci.draw_line(Vector2(1.5, -15), Vector2(4, -19), INK, 1.4, true)
+	circle(ci, Vector2(1.5, -14.5), 3.0, Color("#e8343f"), INK, 1.8)
+	ci.draw_circle(Vector2(0.6, -15.5), 0.9, Color(1, 1, 1, 0.85), true, -1.0, true)
 
 
-func _icon_shake() -> Image:
-	var img: Image = _img(28, 28)
-	_line(img, 17, 1, 15, 10, Color("#e23b4b"))
-	_line(img, 18, 1, 16, 10, Color("#ffffff"))
-	for y: int in range(11, 26):
-		var inset: int = (y - 11) / 5
-		_rect(img, 8 + inset, y, 12 - inset * 2, 1, Color("#ff9ec2"))
-	_rect(img, 10, 25, 8, 2, Color("#dce6ff"))
-	_ellipse(img, 14.0, 10.0, 7.0, 4.0, Color("#ffffff"))
-	_ellipse(img, 14.0, 5.0, 2.0, 2.0, Color("#e23b4b"))
-	_outline(img)
-	return img
+func _icon_yogurt(ci: CanvasItem) -> void:
+	inked_stroke(ci, PackedVector2Array([Vector2(3, -6), Vector2(10, -15)]), Color("#c3d0da"), 2.4, 1.6)
+	circle(ci, Vector2(10.3, -15.4), 2.2, Color("#c3d0da"), INK, 1.6)
+	var cup: PackedVector2Array = round_poly(PackedVector2Array([
+		Vector2(-11, -5), Vector2(11, -5), Vector2(8.5, 14), Vector2(-8.5, 14)]), 2.5)
+	fill(ci, cup, WHITE)
+	for band: PackedVector2Array in clip(cup, PackedVector2Array([Vector2(-14, 0), Vector2(14, 0), Vector2(14, 9), Vector2(-14, 9)])):
+		ci.draw_colored_polygon(band, PINK)
+	fill(ci, heart(Vector2(0, 4.2), 7.5), Color("#e8343f"), INK, 1.4)
+	outline(ci, cup)
+	fill(ci, rrect(Rect2(-12.5, -8, 25, 3.8), 1.6), Color("#c9d6e3"))
+	fill(ci, round_poly(PackedVector2Array([Vector2(6, -8), Vector2(13, -14), Vector2(15, -9)]), 1.2), Color("#e3ebf2"), INK, 1.8)
 
 
-func _icon_rocket() -> Image:
-	var img: Image = _img(28, 28)
-	_ellipse(img, 14.0, 13.0, 5.0, 10.0, Color("#f6f3ea"))
-	for i: int in range(4):
-		_rect(img, 14 - i, 2 + i, i * 2 + 1, 1, Color("#e23b4b"))
-	_ellipse(img, 14.0, 11.0, 2.5, 2.5, Color("#6ad1ff"))
-	_rect(img, 7, 18, 3, 6, Color("#e23b4b"))
-	_rect(img, 18, 18, 3, 6, Color("#e23b4b"))
-	_ellipse_on(img, 12.0, 17.0, 2.0, 1.5, SPOT)
-	_ellipse(img, 14.0, 25.0, 3.0, 2.0, Color("#ffb13b"))
-	_px(img, 14, 27, Color("#ffe066"))
-	_outline(img)
-	return img
+func _icon_shake(ci: CanvasItem) -> void:
+	# Striped straw.
+	inked_stroke(ci, PackedVector2Array([Vector2(2, -4), Vector2(9, -17)]), WHITE, 3.0, 1.6)
+	for k: int in range(3):
+		var a: Vector2 = Vector2(2, -4).lerp(Vector2(9, -17), 0.25 + float(k) * 0.25)
+		ci.draw_line(a, a + Vector2(1.6, -3.0) * 0.5, Color("#e8343f"), 3.0)
+	# Glass and foot.
+	fill(ci, round_poly(PackedVector2Array([Vector2(-5, 15), Vector2(5, 15), Vector2(3, 11), Vector2(-3, 11)]), 1.2), Color("#d6e6f5"), INK, 1.8)
+	var glass: PackedVector2Array = round_poly(PackedVector2Array([
+		Vector2(-9.5, -4), Vector2(9.5, -4), Vector2(5.5, 12), Vector2(-5.5, 12)]), 2.2)
+	fill(ci, glass, PINK)
+	_shine(ci, Vector2(-6, -1), Vector2(-4, 8), 1.8)
+	# Whipped cream: outlines first, then fills, so the puffs merge into one cloud.
+	var puffs: Array[Vector3] = [Vector3(-5.5, -5, 4.8), Vector3(5.5, -5, 4.8), Vector3(0, -8.5, 5.6)]
+	for p: Vector3 in puffs:
+		ci.draw_circle(Vector2(p.x, p.y), p.z + LW * 0.5, INK, true, -1.0, true)
+	for p2: Vector3 in puffs:
+		ci.draw_circle(Vector2(p2.x, p2.y), p2.z - LW * 0.5, WHITE, true, -1.0, true)
+	ci.draw_line(Vector2(1.5, -15), Vector2(4.5, -19), INK, 1.4, true)
+	circle(ci, Vector2(1.5, -14), 3.0, Color("#e8343f"), INK, 1.8)
+	ci.draw_circle(Vector2(0.6, -15), 0.9, Color(1, 1, 1, 0.85), true, -1.0, true)
 
 
-func _icon_moon() -> Image:
-	var img: Image = _img(28, 28)
-	_ellipse(img, 14.0, 14.0, 11.0, 11.0, Color("#d6d8e0"))
-	_ellipse_on(img, 10.0, 10.0, 3.0, 3.0, Color("#b4b8c6"))
-	_ellipse_on(img, 18.0, 17.0, 4.0, 3.0, Color("#b4b8c6"))
-	_ellipse_on(img, 9.0, 19.0, 2.0, 2.0, Color("#b4b8c6"))
-	# A tiny cow standing on top.
-	_rect(img, 15, 3, 7, 3, Color("#ffffff"))
-	_px(img, 22, 3, Color("#ffffff"))
-	_px(img, 17, 4, SPOT)
-	_px(img, 15, 6, SPOT)
-	_px(img, 20, 6, SPOT)
-	_outline(img)
-	return img
+func _icon_rocket(ci: CanvasItem) -> void:
+	fill(ci, teardrop(Vector2(0, 18), Vector2(0, 11), 4.2), Color("#ff9a2e"), INK, 1.8)
+	ci.draw_colored_polygon(teardrop(Vector2(0, 15.5), Vector2(0, 11), 2.2), Color("#ffe066"))
+	for sx: float in [-1.0, 1.0]:
+		var fin: PackedVector2Array = round_poly(PackedVector2Array([
+			Vector2(5.5 * sx, 1), Vector2(12 * sx, 9), Vector2(12 * sx, 13), Vector2(5 * sx, 10)]), 1.6)
+		fill(ci, fin, Color("#ef4b4b"))
+	var body: PackedVector2Array = round_poly(PackedVector2Array([
+		Vector2(0, -16), Vector2(6, -8), Vector2(7, 2), Vector2(5, 11), Vector2(-5, 11), Vector2(-7, 2), Vector2(-6, -8)]), 3.2)
+	fill(ci, body, WHITE)
+	for nose: PackedVector2Array in clip(body, rrect(Rect2(-10, -20, 20, 12.5), 0.5, 1)):
+		ci.draw_colored_polygon(nose, Color("#ef4b4b"))
+	ci.draw_line(Vector2(-6.4, -7.5), Vector2(6.4, -7.5), INK, 1.6, true)
+	for spot: PackedVector2Array in clip(body, blob(Vector2(4.5, 6), 2.6, 1.0, 0.2, 16)):
+		ci.draw_colored_polygon(spot, Color("#2f2a36"))
+	for spot2: PackedVector2Array in clip(body, blob(Vector2(-5, 7.5), 1.8, 2.0, 0.2, 16)):
+		ci.draw_colored_polygon(spot2, Color("#2f2a36"))
+	outline(ci, body)
+	circle(ci, Vector2(0, -1), 3.6, Color("#7fd6ff"), INK, 1.8)
+	ci.draw_circle(Vector2(-1.2, -2.2), 1.1, Color(1, 1, 1, 0.9), true, -1.0, true)
 
 
-func _icon_coin() -> Image:
-	var img: Image = _img(12, 12)
-	_ellipse(img, 6.0, 6.0, 5.0, 5.0, Color("#ffd23f"))
-	_ellipse(img, 6.0, 6.0, 3.5, 3.5, Color("#f0b429"))
-	_rect(img, 5, 3, 2, 6, Color("#ffe98a"))
-	_outline(img)
-	return img
+func _icon_moon(ci: CanvasItem) -> void:
+	sparkle(ci, Vector2(-12, -11), 3.2, Color("#ffe066"))
+	sparkle(ci, Vector2(13, 7), 2.4, Color("#ffe066"))
+	circle(ci, Vector2(-2, 5), 11.0, Color("#e9e4d6"))
+	for c: Vector3 in [Vector3(-7, 3, 2.8), Vector3(1, 11, 2.3), Vector3(3, 3, 1.7), Vector3(-4, 10.5, 1.2)]:
+		circle(ci, Vector2(c.x, c.y), c.z, Color("#cfc7b2"), Color("#a89f88"), 1.0)
+	# A tiny cow standing on the moon.
+	ci.draw_line(Vector2(0, -6), Vector2(0, -3), INK, 2.0, true)
+	ci.draw_line(Vector2(7, -6), Vector2(7.5, -2.2), INK, 2.0, true)
+	fill(ci, rrect(Rect2(-2.5, -13, 12, 7.5), 3.0), WHITE, INK, 1.8)
+	for sp: PackedVector2Array in clip(rrect(Rect2(-2.5, -13, 12, 7.5), 3.0), blob(Vector2(1.5, -11), 2.6, 0.5, 0.25, 14)):
+		ci.draw_colored_polygon(sp, Color("#2f2a36"))
+	outline(ci, rrect(Rect2(-2.5, -13, 12, 7.5), 3.0), INK, 1.8)
+	circle(ci, Vector2(11, -13.5), 3.6, WHITE, INK, 1.8)
+	fill(ci, ellipse(Vector2(12.3, -11.8), 2.6, 1.7), PINK, INK, 1.2)
+	ci.draw_circle(Vector2(10.5, -15), 0.8, INK, true, -1.0, true)
+	ci.draw_line(Vector2(-2.5, -11), Vector2(-5, -8), INK, 1.4, true)
 
 
-func _icon_bell() -> Image:
-	var img: Image = _img(14, 14)
-	for y: int in range(2, 11):
-		var hw: int = 2 + (y - 2) / 2
-		_rect(img, 7 - hw, y, hw * 2, 1, Color("#ffd23f"))
-	_rect(img, 1, 10, 12, 2, Color("#f0b429"))
-	_ellipse(img, 7.0, 12.5, 1.5, 1.5, Color("#b07d12"))
-	_rect(img, 6, 0, 2, 2, Color("#b07d12"))
-	_px(img, 5, 4, Color("#fff3b0"))
-	_outline(img)
-	return img
+func _icon_coin(ci: CanvasItem) -> void:
+	circle(ci, Vector2(0, 0), 13.0, GOLD)
+	ci.draw_arc(Vector2(0, 0), 9.5, 0.0, TAU, 32, GOLD_DARK, 1.6, true)
+	var f: Font = font_bold
+	if f == null:
+		f = ThemeDB.fallback_font
+	var sz: Vector2 = f.get_string_size("$", HORIZONTAL_ALIGNMENT_LEFT, -1, 17)
+	var pos: Vector2 = Vector2(-sz.x * 0.5, f.get_ascent(17) * 0.5 - 1.5)
+	ci.draw_string(f, pos, "$", HORIZONTAL_ALIGNMENT_LEFT, -1, 17, GOLD_DARK)
+	ci.draw_arc(Vector2(0, 0), 10.8, PI * 1.1, PI * 1.45, 8, Color(1, 1, 1, 0.8), 1.8, true)
 
 
-func _icon_farmhand() -> Image:
-	var img: Image = _img(16, 16)
-	_ellipse(img, 8.0, 10.0, 4.5, 4.5, Color("#f1c27d"))
-	_rect(img, 1, 6, 14, 2, Color("#e8c55a"))
-	_rect(img, 4, 2, 8, 5, Color("#e8c55a"))
-	_rect(img, 4, 5, 8, 1, Color("#c0392b"))
-	_px(img, 6, 10, OUTLINE)
-	_px(img, 10, 10, OUTLINE)
-	_line(img, 6, 12, 10, 12, Color("#a0522d"))
-	_outline(img)
-	return img
+func _icon_bell(ci: CanvasItem) -> void:
+	ci.draw_arc(Vector2(0, -11), 4.0, PI, TAU, 12, INK, 4.4, true)
+	ci.draw_arc(Vector2(0, -11), 4.0, PI * 1.02, PI * 1.98, 12, GOLD_DARK, 1.8, true)
+	var body: PackedVector2Array = round_poly(PackedVector2Array([
+		Vector2(-6.5, -11), Vector2(6.5, -11), Vector2(10.5, 8), Vector2(-10.5, 8)]), 3.0)
+	fill(ci, body, GOLD)
+	circle(ci, Vector2(0, 10.5), 2.8, Color("#a86a00"), INK, 1.8)
+	fill(ci, ellipse(Vector2(0, 8), 11.0, 3.0), GOLD_DARK)
+	_shine(ci, Vector2(-4.5, -7), Vector2(-6.5, 3), 2.2)
+	sparkle(ci, Vector2(11, -11), 4.0, WHITE)
 
 
-func _icon_lock() -> Image:
-	var img: Image = _img(12, 12)
-	_rect(img, 2, 5, 8, 6, Color("#aeb8c2"))
-	for i: int in range(5):
-		_px(img, 3, 1 + i, Color("#6b7580"))
-		_px(img, 8, 1 + i, Color("#6b7580"))
-	_rect(img, 4, 0, 4, 1, Color("#6b7580"))
-	_rect(img, 5, 7, 2, 2, OUTLINE)
-	_outline(img)
-	return img
+func _icon_farmhand(ci: CanvasItem) -> void:
+	circle(ci, Vector2(-10.5, 4), 2.8, Color("#f2b47e"))
+	circle(ci, Vector2(10.5, 4), 2.8, Color("#f2b47e"))
+	circle(ci, Vector2(0, 3.5), 10.5, Color("#f7c99a"))
+	ci.draw_circle(Vector2(-6, 7), 2.2, Color(1.0, 0.45, 0.45, 0.45), true, -1.0, true)
+	ci.draw_circle(Vector2(6, 7), 2.2, Color(1.0, 0.45, 0.45, 0.45), true, -1.0, true)
+	ci.draw_circle(Vector2(-3.8, 3), 1.5, INK, true, -1.0, true)
+	ci.draw_circle(Vector2(3.8, 3), 1.5, INK, true, -1.0, true)
+	ci.draw_arc(Vector2(0, 6), 4.0, 0.25 * PI, 0.75 * PI, 10, INK, 1.6, true)
+	inked_stroke(ci, PackedVector2Array([Vector2(3, 9), Vector2(13, 6)]), Color("#f4d35e"), 1.4, 1.0)
+	# Straw hat.
+	fill(ci, ellipse(Vector2(0, -5), 15.5, 4.2), Color("#f4d35e"))
+	var crown: PackedVector2Array = round_poly(PackedVector2Array([
+		Vector2(-8.5, -5), Vector2(-7, -15), Vector2(7, -15), Vector2(8.5, -5)]), 2.6)
+	fill(ci, crown, Color("#f4d35e"))
+	for band: PackedVector2Array in clip(crown, PackedVector2Array([Vector2(-10, -9.5), Vector2(10, -9.5), Vector2(10, -6), Vector2(-10, -6)])):
+		ci.draw_colored_polygon(band, BARN)
+	outline(ci, crown)
+
+
+func _icon_drop(ci: CanvasItem) -> void:
+	var d: PackedVector2Array = teardrop(Vector2(0, -15), Vector2(0, 4), 10.0, 28)
+	fill(ci, d, WHITE)
+	ci.draw_colored_polygon(ellipse(Vector2(-4, 3), 2.0, 3.6, 0.3), Color("#d4e6f5"))
+	ci.draw_circle(Vector2(-4.5, -1), 1.6, Color(1, 1, 1, 1), true, -1.0, true)
+	ci.draw_arc(Vector2(0, 4), 7.0, 0.15 * PI, 0.75 * PI, 10, Color("#a9c6e0"), 1.6, true)
+
+
+func _icon_star(ci: CanvasItem) -> void:
+	var s: PackedVector2Array = round_poly(star(Vector2(0, 1.5), 15.0, 7.0), 1.8, 3)
+	fill(ci, s, GOLD)
+	ci.draw_circle(Vector2(-3, 1), 1.4, INK, true, -1.0, true)
+	ci.draw_circle(Vector2(3, 1), 1.4, INK, true, -1.0, true)
+	ci.draw_arc(Vector2(0, 3.5), 2.6, 0.2 * PI, 0.8 * PI, 8, INK, 1.4, true)
+
+
+# A twinkly four-point star (the cow and the farm use it too).
+func sparkle(ci: CanvasItem, c: Vector2, r: float, col: Color) -> void:
+	ci.draw_colored_polygon(round_poly(star(c, r, r * 0.32, 4, 0.0), r * 0.15, 2), col)

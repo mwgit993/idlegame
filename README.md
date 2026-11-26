@@ -1,6 +1,6 @@
 # Udderly Idle (working title)
 
-An idle game about milking a cow and growing a dairy empire, made in **Godot 4.7** (640x360 pixel art, integer-scaled). Everything is generated in code at startup: the cow, the farm, the icons, the sound effects (including a real-sounding moo and a squishy milking squeeze) and the bouncy barnyard background music. The only asset file is the font.
+An idle game about milking a cow and growing a dairy empire, made in **Godot 4.7**, with bright, goofy cartoon art on a 640x360 layout that scales smoothly to any window. Everything is drawn or synthesized in code: the cow, the farm, the icons, the sound effects (a real-sounding moo and a squishy milking squeeze) and the bouncy barnyard background music. The only asset file is the font, [Fredoka](https://github.com/google/fonts/tree/main/ofl/fredoka) (SIL Open Font License, see `assets/fonts/OFL.txt`).
 
 ## How it plays
 - **Milk the cow.** Click her (or press `Space` / `Enter` / controller `A`) to squeeze the udder. Every squeeze earns money.
@@ -9,6 +9,7 @@ An idle game about milking a cow and growing a dairy empire, made in **Godot 4.7
 - **Farmhands.** Hire one per business and it runs by itself, even while the game is closed. You'll be greeted with what they earned when you come back.
 - **Upgrades.** One-time multipliers for a business, for everything, or for your squeezes.
 - **Golden cowbells (prestige).** On the PASTURE tab, move to a bigger pasture: your farm resets, but you keep your cowbells and earn new ones from everything you've ever made. Each cowbell adds +2% profit.
+- **Settings.** The PASTURE tab also has SOUND and MUSIC on/off buttons and SAVE NOW.
 
 The game saves every 10 seconds and when you close it.
 

@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Udderly Idle is a Godot 4.7 (GDScript) idle/clicker game: milk a cow, build dairy businesses, hire farmhands, prestige with golden cowbells. Gameplay is described in `README.md`. The style follows Matthew's other game, Star Viper (`mwgit993/spacegame`): everything generated in code, strict static typing, pixel art at an integer scale, a headless smoke test.
+Udderly Idle is a Godot 4.7 (GDScript) idle/clicker game: milk a cow, build dairy businesses, hire farmhands, prestige with golden cowbells. Gameplay is described in `README.md`. The code style follows Matthew's other game, Star Viper (`mwgit993/spacegame`): everything generated in code, strict static typing, a headless smoke test. The art is different: bright, goofy cartoon drawing made with Godot's vector API (polygons, circles, thick antialiased outlines), not pixel art. The only asset file is the font.
 
 ## Commands
 
@@ -14,15 +14,18 @@ godot --headless --path . --quit-after 30 -- --smoke-test  # must print UDDERLY_
 godot --path .                                             # play
 ```
 
+On a fresh clone the first `--import` prints a few `ERROR`s about the project font (`fredoka.tres`) because it is loaded before the `.ttf` has been imported. They are harmless; the smoke test right after is clean.
+
 The smoke test (`_run_smoke_test` in `scripts/main.gd`) drives the economy and every tab by calling methods directly, checks the results with `_check`, and exits 1 on any failure. It points `Farm.save_path` at `user://smoke_test_save.json`, so real saves are safe. If you add a business, upgrade kind or tab, extend it.
 
 ## Code conventions
 
 - Explicit static types everywhere. Don't use `:=` when the right-hand side is a `Variant` (a Dictionary lookup or an untyped Array element); cast instead, e.g. `float(b["cost"])`.
 - A ternary (`a if c else b`) or `.filter()` produces an untyped Array; assigning that to an `Array[int]` / `Array[Dictionary]` variable fails at runtime. Use an `if` or a loop.
-- The whole UI is built in code in `main.gd` with literal pixel coordinates on a 640x360 canvas. `scenes/main.tscn` is just a `Node2D` with `main.gd`.
-- Text uses the bitmap font at `font_size = 10` (or 20 for the money counter). Texture filtering is nearest-neighbour.
-- `game_data.gd` and `num_fmt.gd` are loaded with `preload` constants (`Data`, `Fmt`), not `class_name`, so a fresh clone doesn't need an import step to resolve them.
+- The whole UI is built in code in `main.gd` with literal coordinates on a 640x360 layout. `scenes/main.tscn` is just a `Node2D` with `main.gd`.
+- Rendering is smooth: `canvas_items` stretch with `fractional` scaling (vectors and text draw at the real window resolution), linear texture filtering, antialiased fonts and 4x 2D MSAA (`rendering/anti_aliasing/quality/msaa_2d`). Don't add image files; draw with `draw_colored_polygon` / `draw_circle` / `draw_polyline` / `draw_arc` and `StyleBoxFlat`.
+- Text uses Fredoka (SIL OFL, `assets/fonts/Fredoka-Variable.ttf`, licence in `assets/fonts/OFL.txt`). The project font is `assets/fonts/fredoka.tres`, a `FontVariation` at SemiBold (wght 600); `Art.font_bold` is the Bold (700) variant for the money counter, titles, bar labels and floaters. Sizes: 9 for small print, 10-12 for body text and buttons, 20 for the money counter (it shrinks to fit). Change a size with `_set_font_size`, which skips no-op overrides (an override re-lays-out the text).
+- `game_data.gd`, `num_fmt.gd`, `cow.gd` and `farm_scene.gd` are loaded with `preload` constants (`Data`, `Fmt`, `Cow`, `FarmScene`), not `class_name`, so a fresh clone doesn't need an import step to resolve them.
 
 ## Architecture
 
@@ -31,17 +34,19 @@ Autoloads, in load order:
 | Autoload | Role |
 | --- | --- |
 | `Farm` (`scripts/autoload/farm.gd`) | All game state and economy: money, businesses, farmhands, upgrades, MOO RUSH, golden cowbells, offline earnings, save/load (`user://udderly_save.json`, autosave every 10 s and on quit). |
-| `Art` (`scripts/autoload/pixel_art.gd`) | Paints every sprite into an `Image` at startup. `Art.tex("name")`; unknown names warn and fall back to the coin. |
+| `Art` (`scripts/autoload/pixel_art.gd`) | The cartoon art kit: palette, vector shape helpers (`ellipse`, `superellipse`, `blob`, `round_poly`, `rrect`, `heart`, `fill`/`outline`, `inked_stroke`, `clip`...) and every icon. Call `Art.draw_icon(canvas_item, "name", center, size)` from a draw callback; unknown names warn and draw the coin. The file kept its pixel-art-era name so the autoload line didn't change. |
 | `Sfx` (`scripts/autoload/sfx.gd`) | Synthesizes the sound effects into `AudioStreamWAV`s. `Sfx.play("name")`; unknown names are silently ignored. `squirt` (the milking squeeze) and `moo` have several takes in `_variants`, and `play()` picks one at random. The moo is a pitch-contoured pulse train through moving vowel formants (`BandPass`). |
 | `Music` (`scripts/autoload/music.gd`) | Background tune. The 32-bar loop (whistle, tuba, accordion, banjo, woodblock, shaker, kick, cowbell) is rendered once on a background thread at startup, in about 1 s, into a looping `AudioStreamWAV`. After that it costs nothing per frame. Its volume follows `Farm.music_volume`, and 0 stops it. Headless runs skip the render. The melody and chords are the `MEL_A`/`MEL_B` and `PROG_A`/`PROG_B` constants. |
 
 - **Balance data** is all in `scripts/game_data.gd`: `BUSINESSES` (cost, growth, revenue, cycle time, farmhand), `UPGRADES` (kinds `biz`, `all`, `click`, `click_share`), milestones, MOO RUSH and cowbell constants. Change numbers there, not in `farm.gd`.
 - **Economy rules** (in `farm.gd`): the next unit of a business costs `cost * growth^owned`; one cycle pays `revenue * owned * profit_mult * rush_mult`; `cycle_time` halves at each speed milestone. Without a farmhand a cycle must be started by clicking the business and stops after paying; with one it loops forever and catches up multiple cycles per frame when cycles get very short. Offline earnings pay `idle_income_per_sec() * seconds away` (farmhand-run businesses only, no MOO RUSH).
 - **Prestige:** `bells_for_total(total_earned) = floor(BELL_SCALE * sqrt(total / BELL_UNIT))`. `move_pasture()` grants the difference, then `reset_pasture()` (keeps bells and lifetime stats).
-- **UI** (`main.gd`): the left panel is the farm and the cow (a flat Button over the cow sprite calls `_on_squeeze`); the right panel has four pages (`Tab.DAIRY`, `UPGRADES`, `FARMHANDS`, `PASTURE`), each a `Control` toggled by `_set_tab`. `_process` calls `Farm.tick(delta)` and then `_refresh_all()`, which only refreshes the visible page. Progress bars, the MOO RUSH meter and the milk drops / floating "+$" texts are drawn with `draw.connect(...)` callbacks.
+- **UI** (`main.gd`): the background is `FarmScene` (`scripts/farm_scene.gd`): sky, sun, clouds, hills, barn, fence and flowers, each a `Control` that draws once (Godot keeps the draw commands). Per frame it only moves/rotates a few of them (drifting clouds, turning sun rays, swaying flowers, the MOO RUSH rainbow's alpha). The cow is `scripts/cow.gd`, a `Control` that redraws every frame: little springs for squash and stretch, googly pupils that follow the mouse, blinks, ears, tail, milk drops and splashes, and the MOO RUSH dance (heart eyes, tongue, hearts, sparkles). `main.gd` calls `cow.squeeze()` from `_on_squeeze`, which a flat Button over the cow triggers. The right panel has four pages (`Tab.DAIRY`, `UPGRADES`, `FARMHANDS`, `PASTURE`), each a `Control` toggled by `_set_tab`. `_process` calls `Farm.tick(delta)` and then `_refresh_all()`, which only refreshes the visible page. Progress bars, the MOO RUSH meter, icons, tab badges and the floating "+$" texts are drawn with `draw.connect(...)` callbacks.
+- **Buttons** are styled by `_style_btn(b, kind)` (`cream`, `green`, `gold`, `red`, `pink`, `card`, `hired`; bright kinds get white outlined text) and squash/boing with tweens via `_bouncy`. Use `_set_kind` / `_set_enabled` in refresh code: they only touch the theme when something changes.
+- **Settings:** the PASTURE tab's SOUND and MUSIC buttons flip `Farm.sfx_volume` (0.8/0) and `Farm.music_volume` (0.6/0) and save. Whatever plays music should read `Farm.music_volume`.
 - Money is a `float` (64-bit), so it goes far past what an `int` can hold; `num_fmt.gd` names big numbers up to duodecillion.
 
 ## Adding content
 
-- **Business:** add an entry to `Data.BUSINESSES` (with a farmhand), an icon `icon_<id>` in `Art._build_all`, and check the dairy and farmhands pages still fit (8 rows of 38 px fill the panel; a 9th needs scrolling).
+- **Business:** add an entry to `Data.BUSINESSES` (with a farmhand), an icon for its id in `Art` (an `_icon_<name>` function drawn in a 32x32 box centred on 0,0, the id in `Art.ICONS` and a branch in `Art.draw_icon`; the smoke test checks every business has one), and check the dairy and farmhands pages still fit (8 rows of 36.5 px fill the panel; a 9th needs scrolling).
 - **Upgrade:** add to `Data.UPGRADES`. The upgrades page lists the 7 cheapest not yet bought.
