@@ -20,6 +20,7 @@ config/icon="res://icon.svg"
 Farm="*res://scripts/autoload/farm.gd"
 Art="*res://scripts/autoload/pixel_art.gd"
 Sfx="*res://scripts/autoload/sfx.gd"
+Music="*res://scripts/autoload/music.gd"
 
 [display]
 

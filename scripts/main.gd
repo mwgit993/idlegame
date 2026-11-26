@@ -835,6 +835,17 @@ func _run_smoke_test() -> void:
 	ok = _check(is_equal_approx(Farm.bell_mult(), 3.0), "100 bells should give x3") and ok
 	ok = _check(Farm.claimable_bells() == 0, "bells were claimable twice") and ok
 
+	# Music: one 8-bar pass renders, isn't silent, and fits the loop length.
+	var pcm: PackedByteArray = Music.render_loop(1)
+	var loudest: int = 0
+	for i: int in range(0, pcm.size() - 2, 4 * 97):
+		loudest = maxi(loudest, absi(pcm.decode_s16(i)))
+	ok = _check(pcm.size() > 22050 * 4 * 10 and loudest > 3000, "music render is empty or silent (%d bytes, peak %d)" % [pcm.size(), loudest]) and ok
+	# Sound effects: every take of the milking squeeze and the moo exists.
+	var sq: Array = Sfx._variants.get("squirt", [])
+	var moo: Array = Sfx._variants.get("moo", [])
+	ok = _check(sq.size() >= 3 and moo.size() >= 3, "missing squeeze or moo takes") and ok
+
 	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://smoke_test_save.json"))
 	if ok:
 		print("UDDERLY_SMOKE_TEST_PASSED")
