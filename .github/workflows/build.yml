@@ -1,0 +1,117 @@
+name: Build, Auto-Merge & Publish Udderly Idle (.exe)
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: idlegame-release-pipeline
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  build-windows:
+    name: Smoke Test, Auto-Merge & Package UdderlyIdle.exe
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.ref }}
+          fetch-depth: 0
+
+      - name: Merge latest main when validating a Pull Request
+        if: github.event_name == 'pull_request'
+        shell: pwsh
+        run: |
+          git config user.name "Idle Game CI"
+          git config user.email "ci@idlegame.local"
+          git fetch origin main
+          git merge origin/main --no-edit
+
+      - name: Download Godot 4.7.2 (Windows x64)
+        shell: pwsh
+        run: |
+          $url = "https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_win64.exe.zip"
+          Invoke-WebRequest -Uri $url -OutFile "godot.zip"
+          Expand-Archive -Path "godot.zip" -DestinationPath "godot_bin" -Force
+
+      - name: Import project & run automated headless smoke test
+        shell: pwsh
+        run: |
+          $godotConsole = "$PWD\godot_bin\Godot_v4.7.2-stable_win64_console.exe"
+          & $godotConsole --headless --path . --import
+          $out = & $godotConsole --headless --path . --quit-after 30 -- --smoke-test 2>&1 | Out-String
+          Write-Host $out
+          if ($out -notmatch "SMOKE_TEST_PASSED") {
+            Write-Error "Smoke test did not pass!"
+            exit 1
+          }
+
+      - name: Package standalone UdderlyIdle-Windows.zip
+        shell: pwsh
+        run: |
+          $godotGui     = "$PWD\godot_bin\Godot_v4.7.2-stable_win64.exe"
+          $godotConsole = "$PWD\godot_bin\Godot_v4.7.2-stable_win64_console.exe"
+          New-Item -ItemType Directory -Force -Path "builds\windows" | Out-Null
+          & $godotConsole --headless --path . --export-pack "Windows" "builds/windows/UdderlyIdle.pck"
+          if (-not (Test-Path "builds\windows\UdderlyIdle.pck")) {
+            Write-Error "Failed to export UdderlyIdle.pck!"
+            exit 1
+          }
+          Copy-Item -Force $godotGui "builds\windows\UdderlyIdle.exe"
+          Compress-Archive -Path "builds\windows\*" -DestinationPath "UdderlyIdle-Windows.zip" -Force
+          Get-Item "UdderlyIdle-Windows.zip" | Select-Object Name, Length
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: UdderlyIdle-Windows
+          path: UdderlyIdle-Windows.zip
+
+      - name: Auto-Merge Trusted PR & Publish UdderlyIdle-Windows.zip Release
+        if: >-
+          (github.event_name != 'pull_request' && github.ref == 'refs/heads/main') ||
+          (github.event_name == 'pull_request' && !github.event.pull_request.draft &&
+           (github.event.pull_request.user.login == 'jay-zimphy' ||
+            github.event.pull_request.user.login == 'justgetjay' ||
+            github.event.pull_request.user.login == 'mwgit993'))
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUM: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        shell: pwsh
+        run: |
+          $repo = "${{ github.repository }}"
+          $changeDesc = ""
+
+          if ("${{ github.event_name }}" -eq "pull_request") {
+            Write-Host "Auto-merging verified PR #$env:PR_NUM..."
+            gh pr merge $env:PR_NUM -R $repo --merge --delete-branch
+            if ($LASTEXITCODE -ne 0) {
+              Write-Warning "PR #$env:PR_NUM could not be auto-merged (may have new conflicts)."
+              exit 0
+            }
+            $changeDesc = "PR #$env:PR_NUM — $env:PR_TITLE"
+          }
+
+          $mainInfo = gh api "repos/$repo/commits/main" | ConvertFrom-Json
+          $shortSha = $mainInfo.sha.Substring(0, 7)
+          if (-not $changeDesc) {
+            $changeDesc = ($mainInfo.commit.message -split "`n")[0]
+          }
+          $stamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd HH:mm 'UTC'")
+          $notes = "**Latest Change:** $changeDesc`n**Commit:** ``$shortSha`` ($stamp)`n`n### How to Play`n1. Download **UdderlyIdle-Windows.zip** below.`n2. Extract the folder anywhere (keep ``UdderlyIdle.exe`` and ``UdderlyIdle.pck`` together in the same folder!).`n3. Double-click **UdderlyIdle.exe**!"
+
+          # Delete & recreate the 'latest' Release + Git tag so the Release timestamp AND Source code zip both update to right now!
+          gh release delete latest -R $repo --cleanup-tag --yes 2>$null
+          gh release create latest "UdderlyIdle-Windows.zip" -R $repo --target $mainInfo.sha --title "Udderly Idle — Latest Playable Build ($shortSha)" --notes $notes
