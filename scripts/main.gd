@@ -1,43 +1,57 @@
 extends Node2D
 
-# Udderly Idle: the whole screen is built here in code (640x360, integer-scaled).
-# Left: the farm and the cow (click to squeeze the udder). Right: four tabs:
+# Udderly Idle: the whole screen is built here in code (a 640x360 layout, scaled smoothly to
+# the window). Left: the farm and the cow (click to squeeze the udder). Right: four tabs:
 #   DAIRY      your businesses: click an icon to sell, buy more, watch the bars fill
 #   UPGRADES   one-time profit multipliers
 #   FARMHANDS  hire one per business so it runs by itself (and while the game is closed)
 #   PASTURE    golden cowbells (prestige), stats and settings
-# All state lives in the Farm autoload; this script draws it and forwards input.
+# All state lives in the Farm autoload; this script draws it and forwards input. The art is
+# cartoon vector drawing: the cow is scripts/cow.gd, the background scripts/farm_scene.gd,
+# icons and shape helpers are in the Art autoload.
 
 const Data = preload("res://scripts/game_data.gd")
 const Fmt = preload("res://scripts/num_fmt.gd")
+const Cow = preload("res://scripts/cow.gd")
+const FarmScene = preload("res://scripts/farm_scene.gd")
 
 const W: float = 640.0
 const H: float = 360.0
 const LEFT_W: float = 230.0
 const TOP_H: float = 34.0
-const RX: float = 234.0  # right panel content x
-const ROW_Y: float = 52.0
-const ROW_H: float = 38.0
-const FONT_SZ: int = 10
+const PANEL: Rect2 = Rect2(234, 38, 402, 319)  # the right-hand cream panel
+const RX: float = 240.0  # right panel content x
+const ROW_Y: float = 60.0
+const ROW_H: float = 36.5
+const BTN_X: float = RX + 285.0  # buy / hire buttons
+const FS: int = 11         # body text
+const FS_SMALL: int = 9
+const FS_MONEY: int = 20
 
-const COL_PANEL: Color = Color("#3b2618")
-const COL_PANEL_DARK: Color = Color("#24170e")
-const COL_BORDER: Color = Color("#f2d49b")
-const COL_TEXT: Color = Color("#fff6e0")
-const COL_DIM: Color = Color("#b49a78")
-const COL_GOLD: Color = Color("#ffd23f")
-const COL_GREEN: Color = Color("#5cb85c")
-const COL_PINK: Color = Color("#ff9ec2")
+const INK: Color = Color("#2b1e1a")
+const COL_TEXT: Color = Color("#4a2c17")
+const COL_DIM: Color = Color("#9a7552")
+const COL_LIGHT: Color = Color("#fff8e8")
+const COL_CREAM: Color = Color("#fff3d6")
+const COL_CARD: Color = Color("#fffaf0")
+const COL_WOOD: Color = Color("#a8622c")
+const COL_GOLD: Color = Color("#ffcc2e")
+const COL_GREEN: Color = Color("#5fc23a")
+const COL_PINK: Color = Color("#ff6fae")
+const COL_BARN: Color = Color("#d8433a")
+const COL_TAN: Color = Color("#c9a77a")
 
 enum Tab { DAIRY, UPGRADES, FARMHANDS, PASTURE }
 const BUY_MODES: Array[String] = ["x1", "x10", "x100", "NEXT", "MAX"]
+const TAB_NAMES: Array[String] = ["DAIRY", "UPGRADES", "FARMHANDS", "PASTURE"]
 
 var ui: CanvasLayer
 var tab: Tab = Tab.DAIRY
 var buy_mode: int = 0
 
 # Left panel
-var cow_rect: TextureRect
+var farm_scene: Control
+var cow: Control
 var cow_btn: Button
 var fx: Control
 var click_lbl: Label
@@ -46,8 +60,10 @@ var rush_bar: Control
 var money_lbl: Label
 var rate_lbl: Label
 var tab_btns: Array[Button] = []
+var _tab_flags: Array[bool] = [false, false, false, false]
 var toast_lbl: Label
 var toast_box: Panel
+var _toast_sb: StyleBoxFlat
 var hint_lbl: Label
 var _toast_t: float = 0.0
 # Tab pages
@@ -59,33 +75,44 @@ var biz_sub_lbls: Array[Label] = []
 var biz_buy_btns: Array[Button] = []
 var biz_bars: Array[Control] = []
 var upg_rows: Array[Control] = []
+var upg_icons: Array[Control] = []
 var upg_name_lbls: Array[Label] = []
 var upg_desc_lbls: Array[Label] = []
 var upg_btns: Array[Button] = []
 var upg_ids: Array[String] = []
 var upg_header: Label
 var hand_btns: Array[Button] = []
+var hand_faces: Array[Control] = []
 var hand_lbls: Array[Label] = []
 var hand_sub_lbls: Array[Label] = []
 var pasture_lbl: Label
 var move_btn: Button
 var sfx_btn: Button
-var offline_panel: Panel
+var music_btn: Button
+# Welcome-back popup
+var offline_panel: Control
+var offline_card: Panel
 var offline_lbl: Label
+var offline_money_lbl: Label
+var offline_time_lbl: Label
 
-# Cow animation and effects
-var _blink_t: float = 2.5
-var _squeeze_t: float = 0.0
+var _t: float = 0.0
 var _clicks_since_moo: int = 0
-var _drops: Array[Dictionary] = []   # milk drops: pos, vel, life
-var _floaters: Array[Dictionary] = [] # "+$12" texts: pos, text, life, color
+var _floaters: Array[Dictionary] = []  # "+$12" texts: pos, text, life, max, col, drift
+var _btn_styles: Dictionary = {}       # kind -> {state -> StyleBox}
+var _sb_track: StyleBoxFlat
+var _sb_fill_green: StyleBoxFlat
+var _sb_fill_gold: StyleBoxFlat
+var _sb_fill_pink: StyleBoxFlat
+var _sb_shine: StyleBoxFlat
 
 
 func _ready() -> void:
+	_build_styles()
 	_build_ui()
 	Farm.milestone_reached.connect(_on_milestone)
 	Farm.rush_started.connect(_on_rush_started)
-	Farm.rush_ended.connect(func() -> void: _toast("MOO RUSH OVER", COL_DIM))
+	Farm.rush_ended.connect(func() -> void: _toast("MOO RUSH OVER", COL_TAN))
 	_set_tab(Tab.DAIRY)
 	_refresh_all()
 	hint_lbl.visible = Farm.total_clicks < 20
@@ -93,82 +120,183 @@ func _ready() -> void:
 		_run_smoke_test()
 		return
 	if Farm.last_offline_earned > 0.0:
-		offline_lbl.text = "WELCOME BACK!\n\nYOUR FARMHANDS EARNED\n%s\nWHILE YOU WERE AWAY (%s)." % [
-			Fmt.money(Farm.last_offline_earned), Fmt.duration(float(Farm.last_offline_seconds))]
-		offline_panel.visible = true
+		_show_offline(Farm.last_offline_earned, Farm.last_offline_seconds)
 
 
 # =========================================================================================
-# UI CONSTRUCTION
+# STYLES
 # =========================================================================================
-func _box(bg: Color, border: Color, bw: int = 1, margin: float = 2.0) -> StyleBoxFlat:
+func _sb(bg: Color, border: Color, bw: int = 2, radius: int = 8, bottom: int = -1, shadow: int = 0) -> StyleBoxFlat:
 	var sb: StyleBoxFlat = StyleBoxFlat.new()
 	sb.bg_color = bg
 	sb.border_color = border
 	sb.set_border_width_all(bw)
-	sb.set_corner_radius_all(2)
-	sb.set_content_margin_all(margin)
+	if bottom >= 0:
+		sb.border_width_bottom = bottom
+	sb.set_corner_radius_all(radius)
+	sb.anti_aliasing = true
+	sb.set_content_margin_all(2.0)
+	if shadow > 0:
+		sb.shadow_color = Color(0.2, 0.1, 0.02, 0.3)
+		sb.shadow_size = shadow
+		sb.shadow_offset = Vector2(0.0, float(shadow) * 0.6)
 	return sb
 
 
-func _style_btn(b: Button, accent: Color = COL_GOLD) -> void:
-	b.add_theme_font_size_override("font_size", FONT_SZ)
-	b.add_theme_color_override("font_color", COL_TEXT)
-	b.add_theme_color_override("font_hover_color", accent)
-	b.add_theme_color_override("font_pressed_color", Color.WHITE)
-	b.add_theme_color_override("font_disabled_color", Color("#7d6650"))
-	b.add_theme_stylebox_override("normal", _box(Color("#5a3a22"), Color("#c9a26b")))
-	b.add_theme_stylebox_override("hover", _box(Color("#74502f"), accent, 2))
-	b.add_theme_stylebox_override("pressed", _box(Color("#8a6038"), Color.WHITE, 2))
-	b.add_theme_stylebox_override("disabled", _box(Color("#2e1f13"), Color("#5e4630")))
-	b.add_theme_stylebox_override("focus", _box(Color("#74502f"), accent, 2))
+func _build_styles() -> void:
+	var kinds: Dictionary = {
+		"cream": COL_CREAM, "green": COL_GREEN, "gold": Color("#ffbf1f"), "red": COL_BARN,
+		"pink": COL_PINK, "card": Color("#fff6e2"), "hired": COL_GREEN,
+	}
+	for k: String in kinds:
+		var bg: Color = kinds[k]
+		var pressed: StyleBoxFlat = _sb(bg.darkened(0.12), INK, 2, 8, 2)
+		pressed.content_margin_top = 4.0
+		_btn_styles[k] = {
+			"normal": _sb(bg, INK, 2, 8, 4),
+			"hover": _sb(bg.lightened(0.15), INK, 2, 8, 4),
+			"pressed": pressed,
+			"disabled": _sb(Color("#ece0c6"), Color("#bba584"), 2, 8, 3),
+			"focus": StyleBoxEmpty.new(),
+		}
+	# A hired farmhand's button is disabled but should look happy, not greyed out.
+	var hired: Dictionary = _btn_styles["hired"]
+	hired["disabled"] = _sb(Color("#dcf5c8"), Color("#5fae4f"), 2, 8, 3)
+	_sb_track = _sb(Color("#8a5a35"), INK, 2, 6)
+	_sb_fill_green = _sb(Color("#7fdc4c"), Color(0, 0, 0, 0), 0, 5)
+	_sb_fill_gold = _sb(COL_GOLD, Color(0, 0, 0, 0), 0, 5)
+	_sb_fill_pink = _sb(COL_PINK, Color(0, 0, 0, 0), 0, 6)
+	_sb_shine = _sb(Color(1, 1, 1, 0.38), Color(0, 0, 0, 0), 0, 3)
+
+
+# Styles a button: "cream" (dark text), or a bright kind with white outlined text.
+func _style_btn(b: Button, kind: String = "cream", fsize: int = FS) -> void:
+	var st: Dictionary = _btn_styles[kind]
+	for state: String in ["normal", "hover", "pressed", "disabled", "focus"]:
+		b.add_theme_stylebox_override(state, st[state] as StyleBox)
+	var light: bool = kind != "cream" and kind != "card"
+	var fg: Color = Color.WHITE if light else COL_TEXT
+	for c: String in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color"]:
+		b.add_theme_color_override(c, fg)
+	b.add_theme_color_override("font_disabled_color", Color("#3f8f2c") if kind == "hired" else Color("#a68c6a"))
+	b.add_theme_color_override("font_outline_color", INK)
+	b.add_theme_constant_override("outline_size", 4 if light and not b.disabled else 0)
+	b.add_theme_font_size_override("font_size", fsize)
+	b.set_meta("kind", kind)
 	b.focus_mode = Control.FOCUS_NONE
 
 
-func _label(parent: Node, pos: Vector2, size: Vector2, text: String = "", col: Color = COL_TEXT, fsize: int = FONT_SZ) -> Label:
+func _set_kind(b: Button, kind: String) -> void:
+	if String(b.get_meta("kind", "")) != kind:
+		_style_btn(b, kind, b.get_theme_font_size("font_size"))
+
+
+# Enables/disables a button (white outlined text loses its outline while disabled).
+func _set_enabled(b: Button, on: bool) -> void:
+	if b.disabled == (not on):
+		return
+	b.disabled = not on
+	if not on and b.scale != Vector2.ONE:
+		_boing(b, Vector2.ONE, 0.3, Tween.TRANS_BACK)
+	var kind: String = String(b.get_meta("kind", "cream"))
+	var light: bool = kind != "cream" and kind != "card"
+	b.add_theme_constant_override("outline_size", 4 if light and on else 0)
+
+
+# Chunky buttons squash when pressed and boing back when released.
+func _bouncy(b: Button) -> void:
+	b.pivot_offset = b.size * 0.5
+	b.button_down.connect(func() -> void: _boing(b, Vector2(1.08, 0.84), 0.05, Tween.TRANS_QUAD))
+	b.button_up.connect(func() -> void: _boing(b, Vector2.ONE, 0.5, Tween.TRANS_ELASTIC))
+	# Hidden mid-press (tab switch) never sends button_up: don't stay squashed.
+	b.visibility_changed.connect(func() -> void: b.scale = Vector2.ONE)
+
+
+func _boing(c: Control, to: Vector2, dur: float, trans: Tween.TransitionType) -> void:
+	if c.has_meta("tween"):
+		var old: Tween = c.get_meta("tween") as Tween
+		if old != null and old.is_valid():
+			old.kill()
+	var tw: Tween = c.create_tween()
+	tw.tween_property(c, "scale", to, dur).set_trans(trans).set_ease(Tween.EASE_OUT)
+	c.set_meta("tween", tw)
+
+
+# The biggest font size (from big down to small) at which text fits in width.
+func _fit_size(font: Font, text: String, width: float, big: int, small: int) -> int:
+	var sz: int = big
+	while sz > small and font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x > width:
+		sz -= 1
+	return sz
+
+
+# Only touches the override when the size changes (setting it re-lays-out the text).
+func _set_font_size(c: Control, sz: int) -> void:
+	if c.get_theme_font_size("font_size") != sz:
+		c.add_theme_font_size_override("font_size", sz)
+
+
+func _label(parent: Node, pos: Vector2, size: Vector2, text: String = "", col: Color = COL_TEXT, fsize: int = FS, outline_px: int = 0) -> Label:
 	var l: Label = Label.new()
 	l.position = pos
 	l.size = size
 	l.text = text
 	l.add_theme_font_size_override("font_size", fsize)
 	l.add_theme_color_override("font_color", col)
-	l.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.55))
-	l.add_theme_constant_override("shadow_offset_x", 1)
-	l.add_theme_constant_override("shadow_offset_y", 1)
+	if outline_px > 0:
+		l.add_theme_color_override("font_outline_color", INK)
+		l.add_theme_constant_override("outline_size", outline_px)
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	parent.add_child(l)
 	return l
 
 
-func _button(parent: Node, pos: Vector2, size: Vector2, text: String, cb: Callable) -> Button:
+func _button(parent: Node, pos: Vector2, size: Vector2, text: String, cb: Callable, kind: String = "cream", fsize: int = FS) -> Button:
 	var b: Button = Button.new()
 	b.position = pos
 	b.size = size
 	b.text = text
-	_style_btn(b)
+	_style_btn(b, kind, fsize)
 	b.pressed.connect(cb)
 	parent.add_child(b)
+	_bouncy(b)
 	return b
 
 
+func _panel(parent: Node, rect: Rect2, sb: StyleBox) -> Panel:
+	var p: Panel = Panel.new()
+	p.position = rect.position
+	p.size = rect.size
+	p.add_theme_stylebox_override("panel", sb)
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	parent.add_child(p)
+	return p
+
+
+# A Control that draws once with cb(control) (redraw it with queue_redraw()).
+func _canvas(parent: Node, rect: Rect2, cb: Callable) -> Control:
+	var c: Control = Control.new()
+	c.position = rect.position
+	c.size = rect.size
+	c.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	c.draw.connect(func() -> void: cb.call(c))
+	parent.add_child(c)
+	return c
+
+
+# =========================================================================================
+# UI CONSTRUCTION
+# =========================================================================================
 func _build_ui() -> void:
 	ui = CanvasLayer.new()
 	add_child(ui)
 
-	var bg: ColorRect = ColorRect.new()
-	bg.size = Vector2(W, H)
-	bg.color = COL_PANEL_DARK
-	ui.add_child(bg)
-
+	farm_scene = FarmScene.new()
+	ui.add_child(farm_scene)
 	_build_cow_panel()
 	_build_top_bar()
 
-	var right: Panel = Panel.new()
-	right.position = Vector2(LEFT_W, TOP_H)
-	right.size = Vector2(W - LEFT_W, H - TOP_H)
-	right.add_theme_stylebox_override("panel", _box(COL_PANEL, COL_BORDER, 2))
-	ui.add_child(right)
-
+	_panel(ui, PANEL, _sb(COL_CREAM, COL_WOOD, 3, 14, 5, 6))
 	for t: int in range(4):
 		var page: Control = Control.new()
 		page.size = Vector2(W, H)
@@ -180,14 +308,11 @@ func _build_ui() -> void:
 	_build_farmhands_page(pages[Tab.FARMHANDS])
 	_build_pasture_page(pages[Tab.PASTURE])
 
-	toast_box = Panel.new()
-	toast_box.position = Vector2(6.0, TOP_H + 6.0)
-	toast_box.size = Vector2(LEFT_W - 12.0, 30.0)
-	toast_box.add_theme_stylebox_override("panel", _box(Color(0.14, 0.09, 0.05, 0.88), COL_GOLD))
-	toast_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_toast_sb = _sb(COL_GREEN, INK, 2, 14, 4, 3)
+	toast_box = _panel(ui, Rect2(12.0, TOP_H + 8.0, LEFT_W - 24.0, 36.0), _toast_sb)
+	toast_box.pivot_offset = toast_box.size * 0.5
 	toast_box.visible = false
-	ui.add_child(toast_box)
-	toast_lbl = _label(toast_box, Vector2(4.0, 2.0), Vector2(LEFT_W - 20.0, 26.0), "", COL_GOLD)
+	toast_lbl = _label(toast_box, Vector2(6.0, 0.0), Vector2(LEFT_W - 36.0, 32.0), "", Color.WHITE, FS, 4)
 	toast_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	toast_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	toast_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -196,19 +321,13 @@ func _build_ui() -> void:
 
 
 func _build_cow_panel() -> void:
-	var farm: TextureRect = TextureRect.new()
-	farm.texture = Art.tex("farm_bg")
-	farm.position = Vector2(0.0, TOP_H - 4.0)
-	ui.add_child(farm)
-
-	cow_rect = TextureRect.new()
-	cow_rect.texture = Art.tex("cow_idle")
-	cow_rect.position = Vector2(26.0, 158.0)
-	ui.add_child(cow_rect)
+	cow = Cow.new()
+	cow.size = Vector2(W, H)
+	ui.add_child(cow)
 
 	cow_btn = Button.new()
-	cow_btn.position = Vector2(30.0, 170.0)
-	cow_btn.size = Vector2(170.0, 112.0)
+	cow_btn.position = Vector2(14.0, 152.0)
+	cow_btn.size = Vector2(212.0, 158.0)
 	cow_btn.flat = true
 	cow_btn.focus_mode = Control.FOCUS_NONE
 	cow_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
@@ -218,149 +337,169 @@ func _build_cow_panel() -> void:
 	cow_btn.button_down.connect(_on_squeeze)
 	ui.add_child(cow_btn)
 
-	hint_lbl = _label(ui, Vector2(0.0, 112.0), Vector2(LEFT_W, 12.0), "CLICK THE COW TO MILK HER!", Color.WHITE)
+	hint_lbl = _label(ui, Vector2(0.0, 114.0), Vector2(LEFT_W, 18.0), "CLICK THE COW TO MILK HER!", Color.WHITE, 12, 5)
 	hint_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	hint_lbl.add_theme_color_override("font_shadow_color", Color(0.1, 0.15, 0.3, 0.9))
+	hint_lbl.pivot_offset = hint_lbl.size * 0.5
 
-	fx = Control.new()
-	fx.size = Vector2(W, H)
-	fx.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	fx.draw.connect(_draw_fx)
-	ui.add_child(fx)
+	_panel(ui, Rect2(5.0, 317.0, LEFT_W - 10.0, 39.0), _sb(COL_CREAM, COL_WOOD, 3, 12, 4, 3))
+	click_lbl = _label(ui, Vector2(14.0, 319.0), Vector2(LEFT_W - 28.0, 15.0), "", COL_TEXT, 10)
+	rush_bar = _canvas(ui, Rect2(11.0, 334.0, LEFT_W - 22.0, 16.0), func(_c: Control) -> void: _draw_rush_bar())
 
-	var meter_box: Panel = Panel.new()
-	meter_box.position = Vector2(4.0, H - 40.0)
-	meter_box.size = Vector2(LEFT_W - 8.0, 36.0)
-	meter_box.add_theme_stylebox_override("panel", _box(Color(0.14, 0.09, 0.05, 0.85), COL_BORDER))
-	ui.add_child(meter_box)
-	click_lbl = _label(ui, Vector2(10.0, H - 38.0), Vector2(LEFT_W - 20.0, 12.0), "", COL_TEXT)
-	rush_bar = Control.new()
-	rush_bar.position = Vector2(10.0, H - 23.0)
-	rush_bar.size = Vector2(LEFT_W - 20.0, 14.0)
-	rush_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	rush_bar.draw.connect(_draw_rush_bar)
-	ui.add_child(rush_bar)
+	fx = _canvas(ui, Rect2(0.0, 0.0, W, H), func(_c: Control) -> void: _draw_fx())
 
 
 func _build_top_bar() -> void:
-	var top: Panel = Panel.new()
-	top.size = Vector2(W, TOP_H)
-	top.add_theme_stylebox_override("panel", _box(COL_PANEL_DARK, COL_BORDER, 2))
-	ui.add_child(top)
-	var coin: TextureRect = TextureRect.new()
-	coin.texture = Art.tex("coin")
-	coin.position = Vector2(6.0, 5.0)
-	ui.add_child(coin)
-	money_lbl = _label(ui, Vector2(21.0, 3.0), Vector2(210.0, 20.0), "", COL_GOLD, 20)
+	_panel(ui, Rect2(-6.0, -12.0, W + 12.0, TOP_H + 12.0), _sb(COL_BARN, INK, 2, 12, 4, 4))
+	_canvas(ui, Rect2(2.0, 3.0, 26.0, 26.0), func(c: Control) -> void: Art.draw_icon(c, "coin", Vector2(13.0, 13.0), 23.0))
+	money_lbl = _label(ui, Vector2(30.0, -2.0), Vector2(200.0, 26.0), "", COL_GOLD, FS_MONEY, 6)
+	money_lbl.add_theme_font_override("font", Art.font_bold)
 	money_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	rate_lbl = _label(ui, Vector2(8.0, 22.0), Vector2(222.0, 12.0), "", COL_TEXT)
-	var names: Array[String] = ["DAIRY", "UPGRADES", "FARMHANDS", "PASTURE"]
+	rate_lbl = _label(ui, Vector2(31.0, 20.0), Vector2(200.0, 12.0), "", COL_LIGHT, FS_SMALL, 3)
 	for t: int in range(4):
-		var b: Button = _button(ui, Vector2(RX + 2.0 + float(t) * 101.0, 6.0), Vector2(97.0, 22.0), names[t], _set_tab.bind(t))
+		var b: Button = _button(ui, Vector2(RX - 4.0 + float(t) * 100.0, 4.0), Vector2(96.0, 25.0), TAB_NAMES[t], _set_tab.bind(t), "cream", 12)
+		b.draw.connect(_draw_tab_badge.bind(b, t))
 		tab_btns.append(b)
 
 
+func _row_card(page: Control, ry: float, h: float) -> Panel:
+	return _panel(page, Rect2(RX - 2.0, ry, 394.0, h), _sb(COL_CARD, Color("#e6c99a"), 2, 9))
+
+
 func _build_dairy_page(page: Control) -> void:
-	_label(page, Vector2(RX + 4.0, TOP_H + 4.0), Vector2(60.0, 12.0), "BUY:", COL_DIM)
+	_label(page, Vector2(RX + 2.0, 41.0), Vector2(40.0, 18.0), "BUY:", COL_DIM, FS)
 	for m: int in range(BUY_MODES.size()):
-		var b: Button = _button(page, Vector2(RX + 36.0 + float(m) * 46.0, TOP_H + 2.0), Vector2(42.0, 15.0), BUY_MODES[m], _set_buy_mode.bind(m))
+		var b: Button = _button(page, Vector2(RX + 36.0 + float(m) * 50.0, 41.0), Vector2(46.0, 18.0), BUY_MODES[m], _set_buy_mode.bind(m), "cream", 10)
 		buy_mode_btns.append(b)
 	for i: int in range(Farm.biz_count()):
 		var ry: float = ROW_Y + float(i) * ROW_H
+		_row_card(page, ry, ROW_H - 2.0)
 		var icon_b: Button = Button.new()
-		icon_b.position = Vector2(RX + 2.0, ry + 2.0)
-		icon_b.size = Vector2(34.0, 34.0)
-		icon_b.icon = Art.tex("icon_" + String(Farm.biz(i)["id"]))
-		icon_b.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		icon_b.expand_icon = false
-		_style_btn(icon_b)
+		icon_b.position = Vector2(RX + 1.0, ry + 2.0)
+		icon_b.size = Vector2(30.0, 30.0)
+		_style_btn(icon_b, "card")
 		icon_b.pressed.connect(_on_biz_clicked.bind(i))
+		icon_b.draw.connect(_draw_biz_icon.bind(icon_b, String(Farm.biz(i)["id"])))
 		page.add_child(icon_b)
+		_bouncy(icon_b)
 		biz_icon_btns.append(icon_b)
 
-		biz_name_lbls.append(_label(page, Vector2(RX + 40.0, ry + 1.0), Vector2(250.0, 12.0)))
+		biz_name_lbls.append(_label(page, Vector2(RX + 37.0, ry - 0.5), Vector2(245.0, 15.0)))
 		var bar: Control = Control.new()
-		bar.position = Vector2(RX + 40.0, ry + 13.0)
-		bar.size = Vector2(246.0, 13.0)
+		bar.position = Vector2(RX + 37.0, ry + 13.0)
+		bar.size = Vector2(242.0, 10.5)
 		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		bar.draw.connect(_draw_biz_bar.bind(bar, i))
 		page.add_child(bar)
 		biz_bars.append(bar)
-		biz_sub_lbls.append(_label(page, Vector2(RX + 40.0, ry + 26.0), Vector2(250.0, 12.0), "", COL_DIM))
+		biz_sub_lbls.append(_label(page, Vector2(RX + 37.0, ry + 23.5), Vector2(245.0, 12.0), "", COL_DIM, FS_SMALL))
 
-		var buy_b: Button = _button(page, Vector2(RX + 290.0, ry + 2.0), Vector2(112.0, 34.0), "", _on_buy_biz.bind(i))
+		var buy_b: Button = _button(page, Vector2(BTN_X, ry + 2.0), Vector2(106.0, 30.0), "", _on_buy_biz.bind(i), "green", 10)
 		biz_buy_btns.append(buy_b)
 
 
 func _build_upgrades_page(page: Control) -> void:
-	upg_header = _label(page, Vector2(RX + 6.0, TOP_H + 4.0), Vector2(380.0, 12.0), "", COL_DIM)
+	upg_header = _label(page, Vector2(RX + 4.0, 41.0), Vector2(380.0, 18.0), "", COL_DIM, FS)
 	for r: int in range(7):
-		var ry: float = ROW_Y + float(r) * 43.0
+		var ry: float = ROW_Y + float(r) * 41.0
 		var row: Control = Control.new()
-		row.position = Vector2(0, 0)
 		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		page.add_child(row)
 		upg_rows.append(row)
-		var frame: Panel = Panel.new()
-		frame.position = Vector2(RX + 2.0, ry)
-		frame.size = Vector2(400.0, 40.0)
-		frame.add_theme_stylebox_override("panel", _box(COL_PANEL_DARK, Color("#6e5236")))
-		frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		row.add_child(frame)
-		upg_name_lbls.append(_label(row, Vector2(RX + 8.0, ry + 4.0), Vector2(270.0, 12.0), "", COL_GOLD))
-		upg_desc_lbls.append(_label(row, Vector2(RX + 8.0, ry + 20.0), Vector2(270.0, 12.0), "", COL_TEXT))
-		upg_btns.append(_button(row, Vector2(RX + 290.0, ry + 4.0), Vector2(108.0, 32.0), "", _on_buy_upgrade.bind(r)))
+		_row_card(row, ry, 39.0)
+		upg_icons.append(_canvas(row, Rect2(RX + 2.0, ry + 3.0, 32.0, 32.0), _draw_upgrade_icon.bind(r)))
+		upg_name_lbls.append(_label(row, Vector2(RX + 40.0, ry + 3.0), Vector2(240.0, 16.0), "", COL_TEXT, 12))
+		upg_desc_lbls.append(_label(row, Vector2(RX + 40.0, ry + 20.0), Vector2(240.0, 14.0), "", COL_DIM, 10))
+		upg_btns.append(_button(row, Vector2(BTN_X, ry + 4.0), Vector2(106.0, 31.0), "", _on_buy_upgrade.bind(r), "gold", 10))
 		upg_ids.append("")
 
 
 func _build_farmhands_page(page: Control) -> void:
-	_label(page, Vector2(RX + 6.0, TOP_H + 4.0), Vector2(380.0, 12.0), "A FARMHAND RUNS ONE BUSINESS FOR YOU, EVEN WHILE YOU'RE AWAY.", COL_DIM)
+	_label(page, Vector2(RX + 4.0, 42.0), Vector2(390.0, 16.0), "A FARMHAND RUNS ONE BUSINESS FOR YOU, EVEN WHILE YOU'RE AWAY.", COL_DIM, FS_SMALL)
 	for i: int in range(Farm.biz_count()):
 		var ry: float = ROW_Y + float(i) * ROW_H
-		var face: TextureRect = TextureRect.new()
-		face.texture = Art.tex("farmhand")
-		face.position = Vector2(RX + 6.0, ry + 4.0)
-		page.add_child(face)
-		var icon: TextureRect = TextureRect.new()
-		icon.texture = Art.tex("icon_" + String(Farm.biz(i)["id"]))
-		icon.position = Vector2(RX + 22.0, ry + 6.0)
-		icon.scale = Vector2(0.5, 0.5)
-		page.add_child(icon)
-		hand_lbls.append(_label(page, Vector2(RX + 42.0, ry + 4.0), Vector2(240.0, 12.0), String(Farm.biz(i)["farmhand"]), COL_TEXT))
-		hand_sub_lbls.append(_label(page, Vector2(RX + 42.0, ry + 18.0), Vector2(240.0, 12.0), "", COL_DIM))
-		hand_btns.append(_button(page, Vector2(RX + 290.0, ry + 2.0), Vector2(112.0, 34.0), "", _on_hire.bind(i)))
+		_row_card(page, ry, ROW_H - 2.0)
+		var id: String = String(Farm.biz(i)["id"])
+		hand_faces.append(_canvas(page, Rect2(RX, ry, 36.0, 34.0), func(c: Control) -> void:
+			Art.draw_icon(c, "farmhand", Vector2(16.0, 16.0), 28.0)
+			Art.draw_icon(c, id, Vector2(29.0, 26.0), 16.0)))
+		hand_lbls.append(_label(page, Vector2(RX + 40.0, ry + 2.0), Vector2(240.0, 15.0), String(Farm.biz(i)["farmhand"]), COL_TEXT, FS))
+		hand_sub_lbls.append(_label(page, Vector2(RX + 40.0, ry + 17.0), Vector2(240.0, 14.0), "", COL_DIM, 10))
+		hand_btns.append(_button(page, Vector2(BTN_X, ry + 2.0), Vector2(106.0, 30.0), "", _on_hire.bind(i), "red", 10))
 
 
 func _build_pasture_page(page: Control) -> void:
-	var bell: TextureRect = TextureRect.new()
-	bell.texture = Art.tex("bell")
-	bell.position = Vector2(RX + 6.0, TOP_H + 8.0)
-	page.add_child(bell)
-	_label(page, Vector2(RX + 24.0, TOP_H + 8.0), Vector2(360.0, 12.0), "GOLDEN COWBELLS", COL_GOLD)
-	pasture_lbl = _label(page, Vector2(RX + 8.0, TOP_H + 26.0), Vector2(392.0, 200.0), "", COL_TEXT)
+	_canvas(page, Rect2(RX + 2.0, 42.0, 30.0, 30.0), func(c: Control) -> void: Art.draw_icon(c, "bell", Vector2(15.0, 15.0), 28.0))
+	var title: Label = _label(page, Vector2(RX + 38.0, 42.0), Vector2(300.0, 28.0), "GOLDEN COWBELLS", COL_GOLD, 18, 5)
+	title.add_theme_font_override("font", Art.font_bold)
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_row_card(page, 74.0, 180.0)
+	pasture_lbl = _label(page, Vector2(RX + 6.0, 79.0), Vector2(380.0, 172.0), "", COL_TEXT, 10)
 	pasture_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	move_btn = _button(page, Vector2(RX + 60.0, 236.0), Vector2(290.0, 30.0), "", _on_move_pasture)
-	sfx_btn = _button(page, Vector2(RX + 8.0, 318.0), Vector2(140.0, 22.0), "", _on_sfx_toggle)
-	_button(page, Vector2(RX + 262.0, 318.0), Vector2(140.0, 22.0), "SAVE NOW", func() -> void:
+	pasture_lbl.add_theme_constant_override("line_spacing", 0)
+	move_btn = _button(page, Vector2(RX + 34.0, 262.0), Vector2(322.0, 34.0), "", _on_move_pasture, "gold", 13)
+	sfx_btn = _button(page, Vector2(RX, 318.0), Vector2(124.0, 28.0), "", _on_sfx_toggle, "cream", 11)
+	music_btn = _button(page, Vector2(RX + 132.0, 318.0), Vector2(124.0, 28.0), "", _on_music_toggle, "cream", 11)
+	_button(page, Vector2(RX + 264.0, 318.0), Vector2(124.0, 28.0), "SAVE NOW", func() -> void:
 		Farm.save_game()
 		Sfx.play("ui")
 		_toast("GAME SAVED", COL_GREEN)
-	)
+	, "green", 11)
 
 
 func _build_offline_popup() -> void:
-	offline_panel = Panel.new()
-	offline_panel.position = Vector2(170.0, 90.0)
-	offline_panel.size = Vector2(300.0, 160.0)
-	offline_panel.add_theme_stylebox_override("panel", _box(COL_PANEL, COL_GOLD, 2, 6.0))
+	offline_panel = Control.new()
+	offline_panel.size = Vector2(W, H)
 	offline_panel.visible = false
 	ui.add_child(offline_panel)
-	offline_lbl = _label(offline_panel, Vector2(10.0, 12.0), Vector2(280.0, 100.0), "", COL_TEXT)
+	var dim: ColorRect = ColorRect.new()
+	dim.size = Vector2(W, H)
+	dim.color = Color(0.1, 0.05, 0.02, 0.45)
+	offline_panel.add_child(dim)  # also swallows clicks until COLLECT
+
+	offline_card = Panel.new()
+	offline_card.position = Vector2(160.0, 84.0)
+	offline_card.size = Vector2(320.0, 196.0)
+	offline_card.pivot_offset = offline_card.size * 0.5
+	offline_card.add_theme_stylebox_override("panel", _sb(COL_CREAM, COL_WOOD, 4, 18, 6, 10))
+	offline_panel.add_child(offline_card)
+	var ribbon: Panel = _panel(offline_card, Rect2(30.0, -16.0, 260.0, 38.0), _sb(COL_BARN, INK, 2, 12, 5, 3))
+	var title: Label = _label(ribbon, Vector2(0.0, 0.0), Vector2(260.0, 33.0), "WELCOME BACK!", Color.WHITE, 20, 5)
+	title.add_theme_font_override("font", Art.font_bold)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	offline_lbl = _label(offline_card, Vector2(20.0, 34.0), Vector2(280.0, 16.0), "YOUR FARMHANDS EARNED", COL_TEXT, 12)
 	offline_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_button(offline_panel, Vector2(100.0, 120.0), Vector2(100.0, 26.0), "COLLECT", func() -> void:
-		offline_panel.visible = false
+	_canvas(offline_card, Rect2(0.0, 0.0, 320.0, 196.0), func(c: Control) -> void:
+		Art.draw_icon(c, "farmhand", Vector2(40.0, 82.0), 44.0)
+		Art.draw_icon(c, "coin", Vector2(282.0, 76.0), 30.0)
+		Art.draw_icon(c, "coin", Vector2(270.0, 94.0), 24.0)
+		Art.sparkle(c, Vector2(298.0, 98.0), 5.0, Color("#ffe066"))
+		Art.sparkle(c, Vector2(22.0, 56.0), 4.0, Color("#ffe066")))
+	offline_money_lbl = _label(offline_card, Vector2(66.0, 54.0), Vector2(188.0, 40.0), "", COL_GOLD, 26, 6)
+	offline_money_lbl.add_theme_font_override("font", Art.font_bold)
+	offline_money_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	offline_money_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	offline_time_lbl = _label(offline_card, Vector2(20.0, 102.0), Vector2(280.0, 30.0), "", COL_DIM, 11)
+	offline_time_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	offline_time_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_button(offline_card, Vector2(90.0, 138.0), Vector2(140.0, 38.0), "COLLECT", func() -> void:
+		_hide_offline()
 		Sfx.play("coin")
-	)
+	, "green", 16)
+
+
+func _show_offline(amount: float, seconds: int) -> void:
+	offline_money_lbl.text = Fmt.money(amount)
+	_set_font_size(offline_money_lbl, _fit_size(offline_money_lbl.get_theme_font("font"), offline_money_lbl.text, offline_money_lbl.size.x, 26, 12))
+	offline_time_lbl.text = "WHILE YOU WERE AWAY (%s)." % Fmt.duration(float(seconds))
+	offline_panel.visible = true
+	offline_card.scale = Vector2(0.4, 0.4)
+	var tw: Tween = offline_card.create_tween()
+	tw.tween_property(offline_card, "scale", Vector2.ONE, 0.45).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+
+func _hide_offline() -> void:
+	offline_panel.visible = false
 
 
 # =========================================================================================
@@ -368,18 +507,17 @@ func _build_offline_popup() -> void:
 # =========================================================================================
 func _on_squeeze() -> void:
 	var v: float = Farm.squeeze()
-	_squeeze_t = 0.12
+	cow.squeeze()
 	Sfx.play("squirt", -8.0, 0.12)
 	_clicks_since_moo += 1
 	if _clicks_since_moo >= 25 and randf() < 0.15:
 		_clicks_since_moo = 0
 		Sfx.play("moo", -4.0, 0.08)
-	var udder: Vector2 = cow_rect.position + Vector2(64.0, 108.0)
-	for k: int in range(3):
-		_drops.append({"pos": udder + Vector2(randf_range(-10.0, 10.0), 0.0), "vel": Vector2(randf_range(-20.0, 20.0), randf_range(40.0, 90.0)), "life": 0.6})
 	hint_lbl.visible = Farm.total_clicks < 20
-	_floaters.append({"pos": cow_rect.position + Vector2(randf_range(30.0, 130.0), randf_range(4.0, 30.0)), "text": "+" + Fmt.short_money(v), "life": 0.9,
-		"col": COL_GOLD if Farm.rush_left > 0.0 else Color.WHITE})
+	if _floaters.size() < 40:
+		var g: Vector2 = cow.ground
+		_floaters.append({"pos": g + Vector2(randf_range(-75.0, 70.0), randf_range(-178.0, -140.0)), "text": "+" + Fmt.short_money(v),
+			"life": 1.0, "max": 1.0, "col": COL_GOLD if Farm.rush_left > 0.0 else Color.WHITE, "drift": randf_range(-14.0, 14.0)})
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -462,7 +600,7 @@ func _on_move_pasture() -> void:
 	var gained: int = Farm.move_pasture()
 	if gained > 0:
 		Sfx.play("bell")
-		_toast("+%d GOLDEN COWBELLS! A FRESH PASTURE AWAITS." % gained, COL_GOLD)
+		_toast("+%d GOLDEN COWBELLS! A FRESH PASTURE AWAITS." % gained, Color("#f0a800"))
 		_set_tab(Tab.DAIRY)
 	else:
 		Sfx.play("cant", -10.0)
@@ -475,9 +613,17 @@ func _on_sfx_toggle() -> void:
 	_refresh_all()
 
 
+# The music player reads Farm.music_volume; this only flips and saves it.
+func _on_music_toggle() -> void:
+	Farm.music_volume = 0.0 if Farm.music_volume > 0.0 else 0.6
+	Farm.save_game()
+	Sfx.play("ui")
+	_refresh_all()
+
+
 func _on_milestone(i: int, count: int) -> void:
 	var speed: bool = count in Data.SPEED_MILESTONES
-	_toast("%s x%d: %s!" % [String(Farm.biz(i)["name"]), count, "DOUBLE SPEED" if speed else "DOUBLE PROFITS"], COL_GOLD)
+	_toast("%s x%d: %s!" % [String(Farm.biz(i)["name"]), count, "DOUBLE SPEED" if speed else "DOUBLE PROFITS"], Color("#f0a800"))
 	Sfx.play("milestone")
 
 
@@ -489,9 +635,12 @@ func _on_rush_started() -> void:
 
 func _toast(text: String, col: Color) -> void:
 	toast_lbl.text = text
-	toast_lbl.add_theme_color_override("font_color", col)
+	_toast_sb.bg_color = col
 	toast_box.visible = true
+	toast_box.modulate.a = 1.0
 	_toast_t = 2.6
+	toast_box.scale = Vector2(0.3, 0.3)
+	_boing(toast_box, Vector2.ONE, 0.4, Tween.TRANS_BACK)
 
 
 # =========================================================================================
@@ -499,34 +648,15 @@ func _toast(text: String, col: Color) -> void:
 # =========================================================================================
 func _process(delta: float) -> void:
 	Farm.tick(delta)
+	_t += delta
 
-	_blink_t -= delta
-	if _blink_t < -0.12:
-		_blink_t = randf_range(2.0, 5.0)
-	_squeeze_t = maxf(0.0, _squeeze_t - delta)
-	if _squeeze_t > 0.0:
-		cow_rect.texture = Art.tex("cow_squeeze")
-	elif _blink_t < 0.0:
-		cow_rect.texture = Art.tex("cow_blink")
-	else:
-		cow_rect.texture = Art.tex("cow_idle")
-	var bob: float = sin(float(Time.get_ticks_msec()) * 0.002) * 1.5
-	cow_rect.position.y = 158.0 + round(bob) + (1.0 if _squeeze_t > 0.0 else 0.0)
-	cow_rect.modulate = Color(1.0, 0.92, 0.75) if Farm.rush_left > 0.0 and int(Time.get_ticks_msec() / 120) % 2 == 0 else Color.WHITE
+	if hint_lbl.visible:
+		hint_lbl.rotation = sin(_t * 3.0) * 0.05
+		hint_lbl.scale = Vector2.ONE * (1.0 + sin(_t * 6.0) * 0.04)
 
-	for d: Dictionary in _drops:
-		var v: Vector2 = d["vel"]
-		v.y += 260.0 * delta
-		d["vel"] = v
-		d["pos"] = (d["pos"] as Vector2) + v * delta
-		d["life"] = float(d["life"]) - delta
-	var live_drops: Array[Dictionary] = []
-	for d: Dictionary in _drops:
-		if float(d["life"]) > 0.0:
-			live_drops.append(d)
-	_drops = live_drops
 	for f: Dictionary in _floaters:
-		f["pos"] = (f["pos"] as Vector2) + Vector2(0.0, -28.0 * delta)
+		var age: float = float(f["max"]) - float(f["life"])
+		f["pos"] = (f["pos"] as Vector2) + Vector2(float(f["drift"]), -46.0 * exp(-age * 1.5)) * delta
 		f["life"] = float(f["life"]) - delta
 	var live_floaters: Array[Dictionary] = []
 	for f: Dictionary in _floaters:
@@ -537,6 +667,7 @@ func _process(delta: float) -> void:
 
 	if _toast_t > 0.0:
 		_toast_t -= delta
+		toast_box.modulate.a = clampf(_toast_t / 0.3, 0.0, 1.0)
 		if _toast_t <= 0.0:
 			toast_box.visible = false
 
@@ -545,11 +676,10 @@ func _process(delta: float) -> void:
 
 func _refresh_all() -> void:
 	money_lbl.text = Fmt.money(Farm.money)
-	var mfont: Font = money_lbl.get_theme_default_font()
-	var big_fits: bool = mfont.get_string_size(money_lbl.text, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x <= money_lbl.size.x
-	money_lbl.add_theme_font_size_override("font_size", 20 if big_fits else FONT_SZ)
+	_set_font_size(money_lbl, _fit_size(money_lbl.get_theme_font("font"), money_lbl.text, money_lbl.size.x, FS_MONEY, 11))
 	var rate: float = Farm.idle_income_per_sec() * Farm.rush_mult()
 	rate_lbl.text = "%s /SEC FROM FARMHANDS" % Fmt.money(rate) if rate > 0.0 else "HIRE FARMHANDS FOR IDLE INCOME"
+	_set_font_size(rate_lbl, _fit_size(rate_lbl.get_theme_font("font"), rate_lbl.text, rate_lbl.size.x, FS_SMALL, 7))
 	click_lbl.text = "SQUEEZE: +%s" % Fmt.money(Farm.click_value())
 	rush_bar.queue_redraw()
 	_refresh_tab_badges()
@@ -565,7 +695,6 @@ func _refresh_all() -> void:
 
 
 func _refresh_tab_badges() -> void:
-	var names: Array[String] = ["DAIRY", "UPGRADES", "FARMHANDS", "PASTURE"]
 	var any_upg: bool = false
 	for u: Dictionary in Data.UPGRADES:
 		if Farm.can_buy_upgrade(u):
@@ -578,21 +707,23 @@ func _refresh_tab_badges() -> void:
 			break
 	var flags: Array[bool] = [false, any_upg, any_hand, Farm.claimable_bells() > 0]
 	for t: int in range(4):
-		tab_btns[t].text = names[t] + (" !" if flags[t] else "")
-		tab_btns[t].add_theme_color_override("font_color", COL_GOLD if t == int(tab) else COL_TEXT)
+		_set_kind(tab_btns[t], "gold" if t == int(tab) else "cream")
+		if flags[t] != _tab_flags[t]:
+			_tab_flags[t] = flags[t]
+			tab_btns[t].queue_redraw()
 
 
 func _refresh_dairy() -> void:
 	for m: int in range(buy_mode_btns.size()):
-		buy_mode_btns[m].add_theme_color_override("font_color", COL_GOLD if m == buy_mode else COL_DIM)
+		_set_kind(buy_mode_btns[m], "green" if m == buy_mode else "cream")
 	for i: int in range(Farm.biz_count()):
 		var b: Dictionary = Farm.biz(i)
 		var own: int = Farm.owned[i]
 		var n: int = _buy_count(i)
 		var cost: float = Farm.cost_of(i, n)
 		biz_buy_btns[i].text = "BUY x%d\n%s" % [n, Fmt.short_money(cost)]
-		biz_buy_btns[i].disabled = cost > Farm.money
-		biz_icon_btns[i].modulate = Color.WHITE if own > 0 else Color(0.4, 0.35, 0.3)
+		_set_enabled(biz_buy_btns[i], cost <= Farm.money)
+		biz_icon_btns[i].modulate = Color.WHITE if own > 0 else Color(0.62, 0.58, 0.55, 0.8)
 		biz_name_lbls[i].text = "%s  x%d" % [String(b["name"]), own] if own > 0 else String(b["name"])
 		if own <= 0:
 			biz_sub_lbls[i].text = "BUY ONE TO OPEN"
@@ -623,11 +754,13 @@ func _refresh_upgrades() -> void:
 		if r < avail.size():
 			var u: Dictionary = avail[r]
 			upg_rows[r].visible = true
-			upg_ids[r] = String(u["id"])
+			if upg_ids[r] != String(u["id"]):
+				upg_ids[r] = String(u["id"])
+				upg_icons[r].queue_redraw()
 			upg_name_lbls[r].text = String(u["name"])
 			upg_desc_lbls[r].text = String(u["desc"])
 			upg_btns[r].text = "BUY\n%s" % Fmt.short_money(float(u["cost"]))
-			upg_btns[r].disabled = not Farm.can_buy_upgrade(u)
+			_set_enabled(upg_btns[r], Farm.can_buy_upgrade(u))
 		else:
 			upg_rows[r].visible = false
 			upg_ids[r] = ""
@@ -638,12 +771,16 @@ func _refresh_farmhands() -> void:
 		var b: Dictionary = Farm.biz(i)
 		var cost: float = float(b["farmhand_cost"])
 		if Farm.farmhands[i]:
-			hand_btns[i].text = "HIRED"
-			hand_btns[i].disabled = true
+			hand_btns[i].text = "HIRED!"
+			_set_kind(hand_btns[i], "hired")
+			_set_enabled(hand_btns[i], false)
+			hand_faces[i].modulate = Color.WHITE
 			hand_sub_lbls[i].text = "RUNS YOUR %s" % String(b["name"])
 		else:
 			hand_btns[i].text = "HIRE\n%s" % Fmt.short_money(cost)
-			hand_btns[i].disabled = Farm.owned[i] <= 0 or Farm.money < cost
+			_set_kind(hand_btns[i], "red")
+			_set_enabled(hand_btns[i], Farm.owned[i] > 0 and Farm.money >= cost)
+			hand_faces[i].modulate = Color(1, 1, 1, 0.55)
 			hand_sub_lbls[i].text = "WOULD RUN YOUR %s" % String(b["name"]) if Farm.owned[i] > 0 else "BUY A %s FIRST" % String(b["name"])
 
 
@@ -659,59 +796,114 @@ func _refresh_pasture() -> void:
 		+ "SQUEEZES: %s   PASTURES MOVED: %d" % [Fmt.commas(float(Farm.total_clicks)), Farm.pastures_moved]
 	)
 	move_btn.text = "MOVE TO A BIGGER PASTURE (+%d)" % claim
-	move_btn.disabled = claim <= 0
+	_set_font_size(move_btn, _fit_size(move_btn.get_theme_font("font"), move_btn.text, move_btn.size.x - 18.0, 13, 8))
+	_set_enabled(move_btn, claim > 0)
 	sfx_btn.text = "SOUND: %s" % ("ON" if Farm.sfx_volume > 0.0 else "OFF")
+	music_btn.text = "MUSIC: %s" % ("ON" if Farm.music_volume > 0.0 else "OFF")
 
 
 # =========================================================================================
 # DRAWING
 # =========================================================================================
+func _draw_bar_text(c: Control, txt: String, r: Rect2, fsize: int) -> void:
+	var font: Font = Art.font_bold
+	var tw: float = font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fsize).x
+	var y: float = r.size.y * 0.5 + font.get_ascent(fsize) * 0.36
+	Art.outlined_text(c, font, Vector2((r.size.x - tw) * 0.5, y), txt, fsize, Color.WHITE, 3)
+
+
+func _draw_fill(c: Control, r: Rect2, frac: float, sb: StyleBoxFlat) -> void:
+	var inner: Rect2 = r.grow(-2.0)
+	var w: float = inner.size.x * clampf(frac, 0.0, 1.0)
+	if w < 3.0:
+		return
+	var fr: Rect2 = Rect2(inner.position, Vector2(w, inner.size.y))
+	c.draw_style_box(sb, fr)
+	if fr.size.x > 8.0:
+		c.draw_style_box(_sb_shine, Rect2(fr.position + Vector2(3.0, 1.5), Vector2(fr.size.x - 6.0, maxf(2.0, fr.size.y * 0.3))))
+
+
 func _draw_biz_bar(bar: Control, i: int) -> void:
-	var font: Font = ThemeDB.fallback_font if bar.get_theme_default_font() == null else bar.get_theme_default_font()
 	var r: Rect2 = Rect2(Vector2.ZERO, bar.size)
-	bar.draw_rect(r, Color("#1a110a"))
+	bar.draw_style_box(_sb_track, r)
 	if Farm.owned[i] > 0:
 		var ct: float = Farm.cycle_time(i)
 		var fill: float = 1.0 if ct < 0.2 and (Farm.farmhands[i] or Farm.running[i]) else Farm.progress[i]
-		var col: Color = COL_GOLD if Farm.rush_left > 0.0 else COL_GREEN
-		if fill > 0.0:
-			bar.draw_rect(Rect2(1.0, 1.0, (r.size.x - 2.0) * fill, r.size.y - 2.0), col)
-			bar.draw_rect(Rect2(1.0, 1.0, (r.size.x - 2.0) * fill, 2.0), col.lightened(0.35))
+		_draw_fill(bar, r, fill, _sb_fill_gold if Farm.rush_left > 0.0 else _sb_fill_green)
 		var txt: String = Fmt.money(Farm.revenue(i))
 		if ct < 0.2:
 			txt = "%s /SEC" % Fmt.money(Farm.revenue(i) / ct)
-		var tw: float = font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SZ).x
-		var tp: Vector2 = Vector2((r.size.x - tw) * 0.5, 10.0)
-		bar.draw_string(font, tp + Vector2(1, 1), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SZ, Color(0, 0, 0, 0.8))
-		bar.draw_string(font, tp, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SZ, COL_TEXT)
-	bar.draw_rect(r, Color("#6e5236"), false, 1.0)
+		_draw_bar_text(bar, txt, r, 9)
 
 
 func _draw_rush_bar() -> void:
-	var font: Font = rush_bar.get_theme_default_font()
 	var r: Rect2 = Rect2(Vector2.ZERO, rush_bar.size)
-	rush_bar.draw_rect(r, Color("#1a110a"))
-	var fill: float = Farm.rush_left / Data.RUSH_SECONDS if Farm.rush_left > 0.0 else Farm.rush_meter
-	var col: Color = COL_PINK if Farm.rush_left > 0.0 else Color("#c25b8a")
-	rush_bar.draw_rect(Rect2(1.0, 1.0, (r.size.x - 2.0) * fill, r.size.y - 2.0), col)
-	var txt: String = "MOO RUSH! x3  %s" % Fmt.duration(Farm.rush_left) if Farm.rush_left > 0.0 else "MOO RUSH METER (KEEP MILKING!)"
-	var tw: float = font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SZ).x
-	rush_bar.draw_string(font, Vector2((r.size.x - tw) * 0.5 + 1.0, 11.0), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SZ, Color(0, 0, 0, 0.8))
-	rush_bar.draw_string(font, Vector2((r.size.x - tw) * 0.5, 10.0), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SZ, Color.WHITE)
-	rush_bar.draw_rect(r, COL_BORDER, false, 1.0)
+	rush_bar.draw_style_box(_sb_track, r)
+	var on: bool = Farm.rush_left > 0.0
+	var fill: float = Farm.rush_left / Data.RUSH_SECONDS if on else Farm.rush_meter
+	if on:
+		_sb_fill_pink.bg_color = COL_PINK.lerp(Color("#ffb3d6"), 0.5 + 0.5 * sin(_t * 12.0))
+	else:
+		_sb_fill_pink.bg_color = Color("#ef5c9c")
+	_draw_fill(rush_bar, r, fill, _sb_fill_pink)
+	var txt: String = "MOO RUSH! x3  %s" % Fmt.duration(Farm.rush_left) if on else "MOO RUSH METER (KEEP MILKING!)"
+	_draw_bar_text(rush_bar, txt, Rect2(14.0, 0.0, r.size.x - 14.0, r.size.y), 9)
+	var beat: float = 1.0 + (0.18 * maxf(0.0, sin(_t * 9.0)) if on else 0.0)
+	Art.fill(rush_bar, Art.heart(Vector2(9.0, r.size.y * 0.5), 15.0 * beat, 28), Color("#ff3d6e"), INK, 1.8)
+
+
+func _draw_tab_badge(b: Button, t: int) -> void:
+	if not _tab_flags[t]:
+		return
+	var c: Vector2 = Vector2(b.size.x - 5.0, 4.0)
+	Art.circle(b, c, 7.0, Color("#ff3b3b"), INK, 2.0)
+	var font: Font = Art.font_bold
+	var tw: float = font.get_string_size("!", HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x
+	b.draw_string(font, c + Vector2(-tw * 0.5, 4.0), "!", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color.WHITE)
+
+
+func _draw_biz_icon(b: Button, id: String) -> void:
+	var dy: float = 1.0 if b.button_pressed else -1.0
+	Art.draw_icon(b, id, b.size * 0.5 + Vector2(0.0, dy), 26.0)
+
+
+func _draw_upgrade_icon(c: Control, r: int) -> void:
+	var id: String = upg_ids[r]
+	if id == "":
+		return
+	var u: Dictionary = {}
+	for x: Dictionary in Data.UPGRADES:
+		if String(x["id"]) == id:
+			u = x
+			break
+	var icon: String = "star"
+	match String(u.get("kind", "all")):
+		"biz":
+			icon = String(Farm.biz(int(u["target"]))["id"])
+		"click":
+			icon = "drop"
+		"click_share":
+			icon = "coin"
+	Art.draw_icon(c, icon, Vector2(16.0, 16.0), 28.0)
 
 
 func _draw_fx() -> void:
-	var font: Font = fx.get_theme_default_font()
-	for d: Dictionary in _drops:
-		var p: Vector2 = d["pos"]
-		fx.draw_rect(Rect2(p.round(), Vector2(2, 3)), Color(1, 1, 1, clampf(float(d["life"]) * 2.0, 0.0, 1.0)))
+	var font: Font = Art.font_bold
 	for f: Dictionary in _floaters:
-		var a: float = clampf(float(f["life"]) * 1.6, 0.0, 1.0)
+		var life: float = float(f["life"])
+		var age: float = float(f["max"]) - life
+		var s: float = 1.0
+		if age < 0.1:
+			s = 0.4 + 0.9 * (age / 0.1)
+		elif age < 0.24:
+			s = 1.3 - 0.3 * ((age - 0.1) / 0.14)
+		var a: float = clampf(life / 0.35, 0.0, 1.0)
 		var c: Color = f["col"]
-		var p2: Vector2 = (f["pos"] as Vector2).round()
-		fx.draw_string(font, p2 + Vector2(1, 1), String(f["text"]), HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SZ, Color(0, 0, 0, a * 0.8))
-		fx.draw_string(font, p2, String(f["text"]), HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SZ, Color(c.r, c.g, c.b, a))
+		var txt: String = String(f["text"])
+		var tw: float = font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x
+		fx.draw_set_transform(f["pos"] as Vector2, 0.0, Vector2(s, s))
+		Art.outlined_text(fx, font, Vector2(-tw * 0.5, 5.0), txt, 15, Color(c.r, c.g, c.b, a), 5, Color(INK.r, INK.g, INK.b, a))
+	fx.draw_set_transform_matrix(Transform2D.IDENTITY)
 
 
 # =========================================================================================
@@ -733,11 +925,14 @@ func _run_smoke_test() -> void:
 	ok = _check(Fmt.money(3.2e9) == "$3.200 BILLION", "big format: " + Fmt.money(3.2e9)) and ok
 	ok = _check(Fmt.short(3.2e9) == "3.20B", "short format: " + Fmt.short(3.2e9)) and ok
 	ok = _check(Fmt.duration(3725.0) == "1H 02M", "duration format: " + Fmt.duration(3725.0)) and ok
+	for b: Dictionary in Data.BUSINESSES:
+		ok = _check(Art.has_icon(String(b["id"])), "no icon for business " + String(b["id"])) and ok
 
 	# Squeezing and the first sale.
 	for k: int in range(5):
 		_on_squeeze()
 	ok = _check(is_equal_approx(Farm.money, 5.0), "5 squeezes should earn $5, got %f" % Farm.money) and ok
+	ok = _check(cow.particle_count() > 0, "squeezing should spray milk") and ok
 	ok = _check(Farm.start_cycle(0), "could not start the milk pail") and ok
 	Farm.tick(1.05)
 	ok = _check(is_equal_approx(Farm.money, 6.5), "a pail cycle should pay $1.50, money %f" % Farm.money) and ok
@@ -813,6 +1008,13 @@ func _run_smoke_test() -> void:
 	for k: int in range(30):
 		_process(0.05)
 
+	# Settings: the music toggle flips Farm.music_volume between 0.6 and 0.0.
+	Farm.music_volume = 0.6
+	_on_music_toggle()
+	ok = _check(Farm.music_volume == 0.0, "MUSIC: OFF should set music_volume to 0") and ok
+	_on_music_toggle()
+	ok = _check(is_equal_approx(Farm.music_volume, 0.6), "MUSIC: ON should set music_volume to 0.6") and ok
+
 	# Save and load.
 	Farm.money = 123456.0
 	Farm.bells = 3
@@ -845,6 +1047,17 @@ func _run_smoke_test() -> void:
 	var sq: Array = Sfx._variants.get("squirt", [])
 	var moo: Array = Sfx._variants.get("moo", [])
 	ok = _check(sq.size() >= 3 and moo.size() >= 3, "missing squeeze or moo takes") and ok
+
+	# Let a few real frames run so every draw callback (cow, farm, bars, icons, MOO RUSH,
+	# the welcome-back popup) executes at least once.
+	Farm.rush_left = 2.0
+	_show_offline(1234.5, 3725)
+	for t: int in range(4):
+		_set_tab(t)
+		_on_squeeze()
+		await get_tree().process_frame
+	_hide_offline()
+	await get_tree().process_frame
 
 	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://smoke_test_save.json"))
 	if ok:
