@@ -510,7 +510,8 @@ func _on_squeeze() -> void:
 	cow.squeeze()
 	Sfx.play("squirt", -8.0, 0.12)
 	_clicks_since_moo += 1
-	if _clicks_since_moo >= 25 and randf() < 0.15:
+	# She moos now and then (roughly every 15 squeezes), never twice in a row too quickly.
+	if _clicks_since_moo >= 10 and randf() < 0.2:
 		_clicks_since_moo = 0
 		Sfx.play("moo", -4.0, 0.08)
 	hint_lbl.visible = Farm.total_clicks < 20
