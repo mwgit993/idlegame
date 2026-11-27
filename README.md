@@ -3,15 +3,31 @@
 An idle game about milking a cow and growing a dairy empire, made in **Godot 4.7**, with bright, goofy cartoon art on a 640x360 layout that scales smoothly to any window. Everything is drawn or synthesized in code: the cow, the farm, the icons, the sound effects (a real-sounding moo and a squishy milking squeeze) and the bouncy barnyard background music. The only asset file is the font, [Fredoka](https://github.com/google/fonts/tree/main/ofl/fredoka) (SIL Open Font License, see `assets/fonts/OFL.txt`).
 
 ## How it plays
-- **Milk the cow.** Click her (or press `Space` / `Enter` / controller `A`) to squeeze the udder. Every squeeze earns money.
+- **Milk the cow.** Click her (or press `Space`, or controller `X` from anywhere) to squeeze the udder. Every squeeze earns money.
 - **MOO RUSH.** Milking fills the pink meter. When it's full, everything earns **x3** for 12 seconds.
-- **Dairy businesses.** Eight of them, from a Milk Pail Stand up to a Moon Cow Ranch. Click a business's icon to sell a batch; the bar fills and pays out. Buy more of each with the buttons on the right (`x1`, `x10`, `x100`, `NEXT` milestone, or `MAX`; `B` cycles them). Owning 25, 50, 100, 200, 300 and 400 of a business doubles its speed; 500 and up double its profits.
+- **Dairy businesses.** Eight of them, from a Milk Pail Stand up to a Moon Cow Ranch. Click a business's icon to sell a batch; the bar fills and pays out. Buy more of each with the buttons on the right (`x1`, `x10`, `x100`, `NEXT` milestone, or `MAX`; `B` or controller `Y` cycles them). Owning 25, 50, 100, 200, 300 and 400 of a business doubles its speed; 500 and up double its profits.
 - **Farmhands.** Hire one per business and it runs by itself, even while the game is closed. You'll be greeted with what they earned when you come back.
 - **Upgrades.** One-time multipliers for a business, for everything, or for your squeezes.
 - **Golden cowbells (prestige).** On the PASTURE tab, move to a bigger pasture: your farm resets, but you keep your cowbells and earn new ones from everything you've ever made. Each cowbell adds +2% profit.
 - **Settings.** The PASTURE tab also has SOUND and MUSIC on/off buttons and SAVE NOW.
 
 The game saves every 10 seconds and when you close it.
+
+## Controls
+Mouse or touch: click or tap anything.
+
+A controller or the arrow keys move a big gold selection ring around everything you can press: the cow, the tabs, the buy-amount buttons, each business's icon and buy button, upgrades, farmhands, the PASTURE buttons and the welcome-back popup. Moving the mouse hides the ring; the next controller or arrow press brings it back where you left it.
+
+| | Controller | Keyboard |
+| --- | --- | --- |
+| Move the selection | D-pad or left stick (one step per push; hold to repeat) | Arrow keys |
+| Press the selected button | `A` | `Enter` |
+| Milk the cow from anywhere | `X` | `Space` |
+| Close the popup / jump back to the cow | `B` | `Esc` |
+| Cycle the buy amount | `Y` | `B` |
+| Switch tabs | `LB` / `RB` | |
+
+While the ring is hidden, `Enter` milks the cow like `Space`.
 
 ## Running it
 ```bash
