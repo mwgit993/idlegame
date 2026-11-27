@@ -5,6 +5,7 @@ extends Node
 # clicks. Balance numbers are in game_data.gd.
 
 const Data = preload("res://scripts/game_data.gd")
+const Fmt = preload("res://scripts/num_fmt.gd")
 const SAVE_VERSION: int = 1
 const AUTOSAVE_SECONDS: float = 10.0
 
@@ -30,6 +31,7 @@ var rush_meter: float = 0.0
 var rush_left: float = 0.0
 var sfx_volume: float = 0.8
 var music_volume: float = 0.6
+var fullscreen: bool = false  # Settings -> DISPLAY; apply_display() applies it
 var last_offline_earned: float = 0.0
 var last_offline_seconds: int = 0
 
@@ -44,6 +46,26 @@ func _ready() -> void:
 	reset_pasture()
 	if "--smoke-test" not in OS.get_cmdline_user_args():
 		load_game()
+		apply_display()
+
+
+# Puts the window in or out of fullscreen to match `fullscreen`. A maximized window counts as
+# windowed and is left alone.
+func apply_display() -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	var mode: DisplayServer.WindowMode = DisplayServer.window_get_mode()
+	var is_fs: bool = mode == DisplayServer.WINDOW_MODE_FULLSCREEN or mode == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN
+	if is_fs != fullscreen:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN if fullscreen else DisplayServer.WINDOW_MODE_WINDOWED)
+
+
+# True if the window is fullscreen right now (the player may have used the OS's own button).
+func window_is_fullscreen() -> bool:
+	if DisplayServer.get_name() == "headless":
+		return fullscreen
+	var mode: DisplayServer.WindowMode = DisplayServer.window_get_mode()
+	return mode == DisplayServer.WINDOW_MODE_FULLSCREEN or mode == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN
 
 
 func biz_count() -> int:
@@ -342,6 +364,8 @@ func save_game() -> void:
 		"pastures_moved": pastures_moved,
 		"sfx_volume": sfx_volume,
 		"music_volume": music_volume,
+		"fullscreen": fullscreen,
+		"number_style": Fmt.style,
 	}
 	var f: FileAccess = FileAccess.open(save_path, FileAccess.WRITE)
 	if f == null:
@@ -388,6 +412,8 @@ func load_game() -> void:
 	pastures_moved = int(d.get("pastures_moved", 0))
 	sfx_volume = clampf(float(d.get("sfx_volume", 0.8)), 0.0, 1.0)
 	music_volume = clampf(float(d.get("music_volume", 0.6)), 0.0, 1.0)
+	fullscreen = bool(d.get("fullscreen", false))
+	Fmt.style = clampi(int(d.get("number_style", 0)), 0, Fmt.STYLE_COUNT - 1)
 	var saved_at: int = int(d.get("saved_at", 0))
 	var away: int = int(Time.get_unix_time_from_system()) - saved_at
 	if saved_at > 0 and away > 0:

@@ -9,14 +9,14 @@ An idle game about milking a cow and growing a dairy empire, made in **Godot 4.7
 - **Farmhands.** Hire one per business and it runs by itself, even while the game is closed. You'll be greeted with what they earned when you come back.
 - **Upgrades.** One-time multipliers for a business, for everything, or for your squeezes.
 - **Golden cowbells (prestige).** On the PASTURE tab, move to a bigger pasture: your farm resets, but you keep your cowbells and earn new ones from everything you've ever made. Each cowbell adds +2% profit.
-- **Settings.** The PASTURE tab also has SOUND and MUSIC on/off buttons and SAVE NOW.
+- **Settings.** The gear at the right end of the top bar opens SETTINGS: windowed or fullscreen, music and sound volume (10% steps), how big numbers are written (`$1.500 BILLION`, `$1.50B` or `$1.500e9`), and SAVE NOW. Every change is saved.
 
 The game saves every 10 seconds and when you close it.
 
 ## Controls
 Mouse or touch: click or tap anything.
 
-A controller or the arrow keys move a big gold selection ring around everything you can press: the cow, the tabs, the buy-amount buttons, each business's icon and buy button, upgrades, farmhands, the PASTURE buttons and the welcome-back popup. Moving the mouse hides the ring; the next controller or arrow press brings it back where you left it.
+A controller or the arrow keys move a big gold selection ring around everything you can press: the cow, the tabs, the buy-amount buttons, each business's icon and buy button, upgrades, farmhands, the PASTURE button, the settings gear and both popups. Moving the mouse hides the ring; the next controller or arrow press brings it back where you left it.
 
 | | Controller | Keyboard |
 | --- | --- | --- |
@@ -24,6 +24,8 @@ A controller or the arrow keys move a big gold selection ring around everything 
 | Press the selected button | `A` | `Enter` |
 | Milk the cow from anywhere | `X` | `Space` |
 | Close the popup / jump back to the cow | `B` | `Esc` |
+| Open / close settings | `Start` (`≡`) | |
+| Fullscreen on / off | | `F11` |
 | Cycle the buy amount | `Y` | `B` |
 | Switch tabs | `LB` / `RB` | |
 
