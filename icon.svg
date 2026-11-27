@@ -1,33 +1,38 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- The cow's face, built from the same shapes as scripts/cow.gd (head-local units). -->
   <defs>
-    <clipPath id="head"><ellipse cx="64" cy="64" rx="34" ry="32"/></clipPath>
+    <clipPath id="head"><polygon points="42.00,0.00 41.77,5.00 41.06,9.20 39.90,13.07 38.28,16.66 36.23,19.97 33.75,23.00 30.86,25.72 27.60,28.12 23.97,30.19 19.99,31.90 15.69,33.25 11.04,34.22 6.00,34.80 0.00,35.00 -6.00,34.80 -11.04,34.22 -15.69,33.25 -19.99,31.90 -23.97,30.19 -27.60,28.12 -30.86,25.72 -33.75,23.00 -36.23,19.97 -38.28,16.66 -39.90,13.07 -41.06,9.20 -41.77,5.00 -42.00,0.00 -41.77,-5.00 -41.06,-9.20 -39.90,-13.07 -38.28,-16.66 -36.23,-19.97 -33.75,-23.00 -30.86,-25.72 -27.60,-28.12 -23.97,-30.19 -19.99,-31.90 -15.69,-33.25 -11.04,-34.22 -6.00,-34.80 -0.00,-35.00 6.00,-34.80 11.04,-34.22 15.69,-33.25 19.99,-31.90 23.97,-30.19 27.60,-28.12 30.86,-25.72 33.75,-23.00 36.23,-19.97 38.28,-16.66 39.90,-13.07 41.06,-9.20 41.77,-5.00"/><circle cx="-8" cy="-32" r="8.0"/><circle cx="1" cy="-36" r="9.0"/><circle cx="9" cy="-31" r="7.5"/></clipPath>
   </defs>
   <rect width="128" height="128" rx="28" fill="#5ec4f2"/>
   <path d="M0 100 Q32 86 64 98 T128 94 V100 A28 28 0 0 1 100 128 H28 A28 28 0 0 1 0 100 Z" fill="#7ccf4a"/>
-  <g stroke="#2b1e1a" stroke-width="5" stroke-linejoin="round">
-    <ellipse cx="25" cy="66" rx="17" ry="9" transform="rotate(25 25 66)" fill="#2f2a36"/>
-    <ellipse cx="103" cy="66" rx="17" ry="9" transform="rotate(-25 103 66)" fill="#fffdf7"/>
-    <path d="M40 40 Q36 24 30 18 Q46 22 50 36 Z" fill="#fff0c4"/>
-    <path d="M88 40 Q92 24 98 18 Q82 22 78 36 Z" fill="#fff0c4"/>
-    <ellipse cx="64" cy="64" rx="34" ry="32" fill="#fffdf7"/>
+  <g transform="translate(64 68) scale(0.94)" stroke-linejoin="round" stroke-linecap="round">
+    <g stroke="#3a2621" stroke-width="4.5">
+      <ellipse cx="-46.4" cy="-10.5" rx="14.5" ry="8" transform="rotate(161.7 -46.4 -10.5)" fill="#3b3440"/>
+      <ellipse cx="46.4" cy="-10.5" rx="14.5" ry="8" transform="rotate(18.3 46.4 -10.5)" fill="#fffdf7"/>
+      <ellipse cx="-25" cy="-36" rx="4.8" ry="7.2" transform="rotate(-24 -25 -36)" fill="#ffeec2"/>
+      <ellipse cx="25" cy="-36" rx="4.8" ry="7.2" transform="rotate(24 25 -36)" fill="#ffeec2"/>
+    </g>
+    <ellipse cx="-48.8" cy="-9.7" rx="8.5" ry="4.2" transform="rotate(161.7 -48.8 -9.7)" fill="#ffb3c8"/>
+    <ellipse cx="48.8" cy="-9.7" rx="8.5" ry="4.2" transform="rotate(18.3 48.8 -9.7)" fill="#ffb3c8"/>
+    <!-- head + tuft: a double-width stroke under the fills leaves one clean outline -->
+    <g stroke="#3a2621" stroke-width="9" fill="#fffdf7"><polygon points="42.00,0.00 41.77,5.00 41.06,9.20 39.90,13.07 38.28,16.66 36.23,19.97 33.75,23.00 30.86,25.72 27.60,28.12 23.97,30.19 19.99,31.90 15.69,33.25 11.04,34.22 6.00,34.80 0.00,35.00 -6.00,34.80 -11.04,34.22 -15.69,33.25 -19.99,31.90 -23.97,30.19 -27.60,28.12 -30.86,25.72 -33.75,23.00 -36.23,19.97 -38.28,16.66 -39.90,13.07 -41.06,9.20 -41.77,5.00 -42.00,0.00 -41.77,-5.00 -41.06,-9.20 -39.90,-13.07 -38.28,-16.66 -36.23,-19.97 -33.75,-23.00 -30.86,-25.72 -27.60,-28.12 -23.97,-30.19 -19.99,-31.90 -15.69,-33.25 -11.04,-34.22 -6.00,-34.80 -0.00,-35.00 6.00,-34.80 11.04,-34.22 15.69,-33.25 19.99,-31.90 23.97,-30.19 27.60,-28.12 30.86,-25.72 33.75,-23.00 36.23,-19.97 38.28,-16.66 39.90,-13.07 41.06,-9.20 41.77,-5.00"/><circle cx="-8" cy="-32" r="8.0"/><circle cx="1" cy="-36" r="9.0"/><circle cx="9" cy="-31" r="7.5"/></g>
+    <g fill="#fffdf7"><polygon points="42.00,0.00 41.77,5.00 41.06,9.20 39.90,13.07 38.28,16.66 36.23,19.97 33.75,23.00 30.86,25.72 27.60,28.12 23.97,30.19 19.99,31.90 15.69,33.25 11.04,34.22 6.00,34.80 0.00,35.00 -6.00,34.80 -11.04,34.22 -15.69,33.25 -19.99,31.90 -23.97,30.19 -27.60,28.12 -30.86,25.72 -33.75,23.00 -36.23,19.97 -38.28,16.66 -39.90,13.07 -41.06,9.20 -41.77,5.00 -42.00,0.00 -41.77,-5.00 -41.06,-9.20 -39.90,-13.07 -38.28,-16.66 -36.23,-19.97 -33.75,-23.00 -30.86,-25.72 -27.60,-28.12 -23.97,-30.19 -19.99,-31.90 -15.69,-33.25 -11.04,-34.22 -6.00,-34.80 -0.00,-35.00 6.00,-34.80 11.04,-34.22 15.69,-33.25 19.99,-31.90 23.97,-30.19 27.60,-28.12 30.86,-25.72 33.75,-23.00 36.23,-19.97 38.28,-16.66 39.90,-13.07 41.06,-9.20 41.77,-5.00"/><circle cx="-8" cy="-32" r="8.0"/><circle cx="1" cy="-36" r="9.0"/><circle cx="9" cy="-31" r="7.5"/></g>
+    <circle cx="-33" cy="-24" r="9.5" fill="#3b3440" clip-path="url(#head)"/>
+    <ellipse cx="-28" cy="-2" rx="7.5" ry="4.6" fill="#ff7394" opacity="0.5"/>
+    <ellipse cx="28" cy="-2" rx="7.5" ry="4.6" fill="#ff7394" opacity="0.5"/>
+    <ellipse cx="0" cy="20" rx="31" ry="18" fill="#ffb3c8" stroke="#3a2621" stroke-width="4.5"/>
+    <ellipse cx="-13" cy="12" rx="8" ry="3.2" transform="rotate(-14 -13 12)" fill="#ffdbe5"/>
+    <ellipse cx="-11" cy="15" rx="3" ry="4" transform="rotate(-17 -11 15)" fill="#e77897"/>
+    <ellipse cx="11" cy="15" rx="3" ry="4" transform="rotate(17 11 15)" fill="#e77897"/>
+    <path d="M-6.5 25 Q0 30.5 6.5 25" fill="none" stroke="#3a2621" stroke-width="3"/>
+    <g fill="#2a1f22">
+      <ellipse cx="-16" cy="-11" rx="6.6" ry="8.4"/>
+      <ellipse cx="16" cy="-11" rx="6.6" ry="8.4"/>
+    </g>
+    <g fill="#ffffff">
+      <circle cx="-18" cy="-14.2" r="2.6"/><circle cx="-13.7" cy="-8.5" r="1.2"/>
+      <circle cx="14" cy="-14.2" r="2.6"/><circle cx="18.3" cy="-8.5" r="1.2"/>
+    </g>
+    <g stroke="#2a1f22" stroke-width="1.8"><path d="M-22.20 -13.88 L-25.81 -15.07"/><path d="M-20.74 -16.85 L-23.60 -19.35"/><path d="M22.20 -13.88 L25.81 -15.07"/><path d="M20.74 -16.85 L23.60 -19.35"/></g>
   </g>
-  <ellipse cx="25" cy="67" rx="10" ry="4" transform="rotate(25 25 67)" fill="#ffadc4"/>
-  <ellipse cx="103" cy="67" rx="10" ry="4" transform="rotate(-25 103 67)" fill="#ffadc4"/>
-  <ellipse cx="46" cy="46" rx="17" ry="15" fill="#2f2a36" clip-path="url(#head)"/>
-  <ellipse cx="64" cy="64" rx="34" ry="32" fill="none" stroke="#2b1e1a" stroke-width="5"/>
-  <g stroke="#2b1e1a" stroke-width="4.5">
-    <circle cx="52" cy="52" r="12.5" fill="#ffffff"/>
-    <circle cx="77" cy="52" r="12.5" fill="#ffffff"/>
-  </g>
-  <circle cx="55" cy="49" r="6" fill="#2b1e1a"/>
-  <circle cx="80" cy="55" r="6" fill="#2b1e1a"/>
-  <circle cx="53" cy="47" r="2" fill="#ffffff"/>
-  <circle cx="78" cy="53" r="2" fill="#ffffff"/>
-  <ellipse cx="64" cy="86" rx="35" ry="20" fill="#ffadc4" stroke="#2b1e1a" stroke-width="5"/>
-  <ellipse cx="50" cy="78" rx="9" ry="4" fill="#ffd8e3" transform="rotate(-12 50 78)"/>
-  <g fill="#e5688c" stroke="#2b1e1a" stroke-width="3">
-    <ellipse cx="52" cy="84" rx="4.5" ry="6.5" transform="rotate(-20 52 84)"/>
-    <ellipse cx="76" cy="84" rx="4.5" ry="6.5" transform="rotate(20 76 84)"/>
-  </g>
-  <path d="M54 95 Q64 102 74 95" fill="none" stroke="#2b1e1a" stroke-width="3.5" stroke-linecap="round"/>
 </svg>

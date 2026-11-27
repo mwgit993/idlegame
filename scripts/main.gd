@@ -106,6 +106,28 @@ var _sb_fill_gold: StyleBoxFlat
 var _sb_fill_pink: StyleBoxFlat
 var _sb_shine: StyleBoxFlat
 
+# Controller / arrow-key selection (see the SELECTION section). Every visible Button is a
+# target; the ring is drawn by nav_hl above everything, including the welcome-back popup.
+const NAV_DEADZONE: float = 0.5       # how far the stick must be pushed to take a step
+const NAV_RELEASE: float = 0.3        # ...and how far back it must come before the next push
+const NAV_REPEAT_DELAY: float = 0.4   # hold a direction this long before it starts repeating
+const NAV_REPEAT_RATE: float = 0.12   # then one step every this many seconds
+const NAV_MOUSE_SLOP: float = 10.0    # mouse travel (px) that switches back to mouse mode
+var nav_hl: Control
+var nav_target: Control               # the selected button; starts on the cow
+var nav_on: bool = false              # ring shown: the last input was a controller or arrow key
+var _nav_pad: bool = false            # the last selection input came from a controller
+var _nav_dir: Vector2i = Vector2i.ZERO    # direction held last frame (stick, d-pad or arrows)
+var _nav_stick: Vector2i = Vector2i.ZERO  # the stick's current direction, with hysteresis
+var _nav_tap: Vector2i = Vector2i.ZERO    # a press that came and went between two frames
+var _nav_repeat: float = 0.0
+var _nav_back: Control                # where the selection was before it moved left onto the cow
+var _nav_saved: Control               # the selection from before the welcome-back popup opened
+var _nav_rect: Rect2 = Rect2()        # the ring's drawn rect, easing toward the target
+var _nav_alpha: float = 0.0
+var _mouse_travel: float = 0.0
+var _collect_btn: Button
+
 
 func _ready() -> void:
 	_build_styles()
@@ -115,6 +137,10 @@ func _ready() -> void:
 	Farm.rush_ended.connect(func() -> void: _toast("MOO RUSH OVER", COL_TAN))
 	_set_tab(Tab.DAIRY)
 	_refresh_all()
+	nav_target = cow_btn
+	if not Input.get_connected_joypads().is_empty():
+		_nav_pad = true
+		_nav_wake()
 	hint_lbl.visible = Farm.total_clicks < 20
 	if "--smoke-test" in OS.get_cmdline_user_args():
 		_run_smoke_test()
@@ -318,6 +344,7 @@ func _build_ui() -> void:
 	toast_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
 	_build_offline_popup()
+	nav_hl = _canvas(ui, Rect2(0.0, 0.0, W, H), func(_c: Control) -> void: _draw_nav())
 
 
 func _build_cow_panel() -> void:
@@ -326,8 +353,8 @@ func _build_cow_panel() -> void:
 	ui.add_child(cow)
 
 	cow_btn = Button.new()
-	cow_btn.position = Vector2(14.0, 152.0)
-	cow_btn.size = Vector2(212.0, 158.0)
+	cow_btn.position = Vector2(12.0, 138.0)
+	cow_btn.size = Vector2(214.0, 172.0)
 	cow_btn.flat = true
 	cow_btn.focus_mode = Control.FOCUS_NONE
 	cow_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
@@ -482,7 +509,7 @@ func _build_offline_popup() -> void:
 	offline_time_lbl = _label(offline_card, Vector2(20.0, 102.0), Vector2(280.0, 30.0), "", COL_DIM, 11)
 	offline_time_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	offline_time_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_button(offline_card, Vector2(90.0, 138.0), Vector2(140.0, 38.0), "COLLECT", func() -> void:
+	_collect_btn = _button(offline_card, Vector2(90.0, 138.0), Vector2(140.0, 38.0), "COLLECT", func() -> void:
 		_hide_offline()
 		Sfx.play("coin")
 	, "green", 16)
@@ -521,17 +548,320 @@ func _on_squeeze() -> void:
 			"life": 1.0, "max": 1.0, "col": COL_GOLD if Farm.rush_left > 0.0 else Color.WHITE, "drift": randf_range(-14.0, 14.0)})
 
 
+# Keyboard: Space milks; arrows move the selection; Enter presses it (or milks while the
+# ring is hidden); Esc closes the popup; B cycles the buy amount.
+# Controller: d-pad / left stick move the selection; A presses it; B closes the popup or
+# jumps back to the cow; X milks from anywhere; Y cycles the buy amount; LB / RB switch tabs.
+# Directions are polled in _nav_update (for the deadzone and hold-to-repeat); a press that
+# starts and ends between two frames is caught here as a tap.
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey:
 		var k: InputEventKey = event as InputEventKey
-		if k.pressed and not k.echo and (k.physical_keycode == KEY_SPACE or k.physical_keycode == KEY_ENTER):
-			_on_squeeze()
-		elif k.pressed and not k.echo and k.physical_keycode == KEY_B:
-			_set_buy_mode((buy_mode + 1) % BUY_MODES.size())
+		if not k.pressed or k.echo:
+			return
+		match k.physical_keycode:
+			KEY_SPACE:
+				_on_squeeze()
+			KEY_ENTER, KEY_KP_ENTER:
+				if nav_on:
+					_nav_activate()
+				else:
+					_on_squeeze()
+			KEY_ESCAPE:
+				if offline_panel.visible:
+					_nav_activate_button(_collect_btn)
+				elif nav_on:
+					_nav_select(cow_btn)
+			KEY_B:
+				_set_buy_mode((buy_mode + 1) % BUY_MODES.size())
+			KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN:
+				_nav_pad = false
+				_nav_tap = _key_dir(k.physical_keycode)
 	elif event is InputEventJoypadButton:
 		var jb: InputEventJoypadButton = event as InputEventJoypadButton
-		if jb.pressed and jb.button_index == JOY_BUTTON_A:
-			_on_squeeze()
+		if not jb.pressed:
+			return
+		_nav_pad = true
+		match jb.button_index:
+			JOY_BUTTON_A:
+				_nav_wake()
+				_nav_activate()
+			JOY_BUTTON_B:
+				_nav_wake()
+				if offline_panel.visible:
+					_nav_activate_button(_collect_btn)
+				elif nav_target != cow_btn:
+					_nav_select(cow_btn)
+			JOY_BUTTON_X:
+				_on_squeeze()
+			JOY_BUTTON_Y:
+				_set_buy_mode((buy_mode + 1) % BUY_MODES.size())
+			JOY_BUTTON_LEFT_SHOULDER:
+				if not offline_panel.visible:
+					_set_tab((int(tab) + 3) % 4)
+			JOY_BUTTON_RIGHT_SHOULDER:
+				if not offline_panel.visible:
+					_set_tab((int(tab) + 1) % 4)
+			JOY_BUTTON_DPAD_UP:
+				_nav_tap = Vector2i.UP
+			JOY_BUTTON_DPAD_DOWN:
+				_nav_tap = Vector2i.DOWN
+			JOY_BUTTON_DPAD_LEFT:
+				_nav_tap = Vector2i.LEFT
+			JOY_BUTTON_DPAD_RIGHT:
+				_nav_tap = Vector2i.RIGHT
+
+
+# Real mouse use hides the selection ring (small nudges don't).
+func _input(event: InputEvent) -> void:
+	if not nav_on:
+		return
+	if event is InputEventMouseMotion:
+		_mouse_travel += (event as InputEventMouseMotion).relative.length()
+		if _mouse_travel > NAV_MOUSE_SLOP:
+			nav_on = false
+	elif event is InputEventMouseButton and (event as InputEventMouseButton).pressed:
+		nav_on = false
+	elif event is InputEventScreenTouch:
+		nav_on = false
+
+
+func _key_dir(key: Key) -> Vector2i:
+	match key:
+		KEY_LEFT:
+			return Vector2i.LEFT
+		KEY_RIGHT:
+			return Vector2i.RIGHT
+		KEY_UP:
+			return Vector2i.UP
+		KEY_DOWN:
+			return Vector2i.DOWN
+	return Vector2i.ZERO
+
+
+# =========================================================================================
+# SELECTION (controller and arrow keys)
+# =========================================================================================
+# Shows the ring (without moving it). Returns false if it was hidden.
+func _nav_wake() -> bool:
+	_mouse_travel = 0.0
+	if nav_on:
+		return true
+	nav_on = true
+	_nav_validate()
+	if _nav_alpha < 0.05 and nav_target != null:
+		_nav_rect = nav_target.get_global_rect()
+	return false
+
+
+# The left stick's direction, with a deadzone and hysteresis: it must pass NAV_DEADZONE to
+# count and drop back under NAV_RELEASE to let go, so drift never moves the selection and
+# one push is one step.
+func _read_stick() -> Vector2i:
+	var devs: Array[int] = Input.get_connected_joypads()
+	if devs.is_empty():
+		devs.append(0)
+	var v: Vector2 = Vector2.ZERO
+	for d: int in devs:
+		var s: Vector2 = Vector2(Input.get_joy_axis(d, JOY_AXIS_LEFT_X), Input.get_joy_axis(d, JOY_AXIS_LEFT_Y))
+		if s.length() > v.length():
+			v = s
+	if _nav_stick != Vector2i.ZERO and Vector2(_nav_stick).dot(v) > NAV_RELEASE:
+		return _nav_stick
+	if absf(v.x) >= absf(v.y) and absf(v.x) > NAV_DEADZONE:
+		return Vector2i(1 if v.x > 0.0 else -1, 0)
+	if absf(v.y) > absf(v.x) and absf(v.y) > NAV_DEADZONE:
+		return Vector2i(0, 1 if v.y > 0.0 else -1)
+	return Vector2i.ZERO
+
+
+func _read_dpad() -> Vector2i:
+	var devs: Array[int] = Input.get_connected_joypads()
+	if devs.is_empty():
+		devs.append(0)
+	for d: int in devs:
+		if Input.is_joy_button_pressed(d, JOY_BUTTON_DPAD_UP):
+			return Vector2i.UP
+		if Input.is_joy_button_pressed(d, JOY_BUTTON_DPAD_DOWN):
+			return Vector2i.DOWN
+		if Input.is_joy_button_pressed(d, JOY_BUTTON_DPAD_LEFT):
+			return Vector2i.LEFT
+		if Input.is_joy_button_pressed(d, JOY_BUTTON_DPAD_RIGHT):
+			return Vector2i.RIGHT
+	return Vector2i.ZERO
+
+
+func _read_arrows() -> Vector2i:
+	for key: Key in [KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT]:
+		if Input.is_physical_key_pressed(key):
+			return _key_dir(key)
+	return Vector2i.ZERO
+
+
+# Called every frame: one step per push, repeating after NAV_REPEAT_DELAY while held, then
+# keeps the selection on something visible and eases the ring toward it.
+func _nav_update(delta: float) -> void:
+	_nav_stick = _read_stick()
+	var held: Vector2i = _nav_stick
+	var pad: bool = true
+	if held == Vector2i.ZERO:
+		held = _read_dpad()
+	if held == Vector2i.ZERO:
+		held = _read_arrows()
+		pad = false
+	if held != _nav_dir:
+		_nav_dir = held
+		if held != Vector2i.ZERO:
+			_nav_pad = pad
+			_nav_step(held)
+			_nav_repeat = NAV_REPEAT_DELAY
+	elif held != Vector2i.ZERO:
+		_nav_repeat -= delta
+		if _nav_repeat <= 0.0:
+			_nav_step(held)
+			_nav_repeat = NAV_REPEAT_RATE
+	elif _nav_tap != Vector2i.ZERO:
+		_nav_step(_nav_tap)
+	_nav_tap = Vector2i.ZERO
+	_nav_validate()
+
+	_nav_alpha = move_toward(_nav_alpha, 1.0 if nav_on else 0.0, delta * 8.0)
+	if nav_target != null:
+		var goal: Rect2 = nav_target.get_global_rect()
+		var k: float = 1.0 - exp(-delta * 22.0)
+		_nav_rect = Rect2(_nav_rect.position.lerp(goal.position, k), _nav_rect.size.lerp(goal.size, k))
+	if _nav_alpha > 0.0 or nav_hl.visible:
+		nav_hl.visible = _nav_alpha > 0.0
+		nav_hl.queue_redraw()
+
+
+# Every visible Button can be selected. While the welcome-back popup is open, only its
+# buttons can.
+func _nav_targets() -> Array[Control]:
+	var out: Array[Control] = []
+	var root: Node = offline_card if offline_panel.visible else ui
+	for n: Node in root.find_children("*", "Button", true, false):
+		var b: Button = n as Button
+		if b.is_visible_in_tree():
+			out.append(b)
+	return out
+
+
+# Keeps the selection on something that can be pressed: into the popup while it is open,
+# back to where it was when it closes, and to the nearest button when a page changes.
+func _nav_validate() -> void:
+	if offline_panel.visible:
+		if nav_target == null or not offline_card.is_ancestor_of(nav_target):
+			_nav_saved = nav_target
+			nav_target = _collect_btn
+		return
+	if nav_target != null and is_instance_valid(nav_target) and nav_target.is_visible_in_tree():
+		return
+	if _nav_saved != null and is_instance_valid(_nav_saved) and _nav_saved.is_visible_in_tree():
+		nav_target = _nav_saved
+	elif nav_target != null and is_instance_valid(nav_target):
+		nav_target = _nav_nearest(nav_target.get_global_rect().get_center())
+	else:
+		nav_target = _nav_nearest(_nav_rect.get_center())
+	_nav_saved = null
+
+
+func _nav_nearest(p: Vector2) -> Control:
+	var best: Control = cow_btn
+	var best_d: float = INF
+	for c: Control in _nav_targets():
+		var d: float = c.get_global_rect().get_center().distance_squared_to(p)
+		if d < best_d:
+			best_d = d
+			best = c
+	return best
+
+
+func _nav_select(c: Control) -> void:
+	if c == null or c == nav_target:
+		return
+	nav_target = c
+	Sfx.play("ui", -16.0, 0.08)
+
+
+# Moves the selection one step. The cow is the whole left column: up from her goes to the
+# active tab, right goes back to wherever you came from. Everything else is picked by
+# position: the nearest button that lies in that direction, preferring ones lined up with
+# the current one.
+func _nav_step(d: Vector2i) -> void:
+	if not _nav_wake():
+		return
+	if nav_target == cow_btn and not offline_panel.visible:
+		if d == Vector2i.UP:
+			_nav_select(tab_btns[int(tab)])
+			return
+		if d == Vector2i.RIGHT and _nav_back != null and is_instance_valid(_nav_back) and _nav_back.is_visible_in_tree():
+			_nav_select(_nav_back)
+			return
+		if d != Vector2i.RIGHT:
+			return
+	var from: Rect2 = nav_target.get_global_rect()
+	var fc: Vector2 = from.get_center()
+	var dv: Vector2 = Vector2(d)
+	var best: Control = null
+	var best_score: float = INF
+	var best_cone: Control = null
+	var best_cone_score: float = INF
+	for c: Control in _nav_targets():
+		if c == nav_target:
+			continue
+		var r: Rect2 = c.get_global_rect()
+		var v: Vector2 = r.get_center() - fc
+		var along: float = v.dot(dv)
+		if along <= 1.0:
+			continue
+		var gap: float = 0.0  # space between the two rects across the direction of travel
+		if d.x != 0:
+			gap = maxf(0.0, maxf(r.position.y - from.end.y, from.position.y - r.end.y))
+		else:
+			gap = maxf(0.0, maxf(r.position.x - from.end.x, from.position.x - r.end.x))
+		var off: float = absf(v.x * dv.y - v.y * dv.x)
+		var score: float = along + gap * 3.0 + off * 0.25
+		if score < best_score:
+			best_score = score
+			best = c
+		if along * 2.0 >= off and score < best_cone_score:
+			best_cone_score = score
+			best_cone = c
+	if best_cone != null:
+		best = best_cone
+	if best == null:
+		return
+	if best == cow_btn:
+		_nav_back = nav_target
+	_nav_select(best)
+
+
+func _nav_activate() -> void:
+	_nav_validate()
+	var b: Button = nav_target as Button
+	if b != null:
+		_nav_activate_button(b)
+
+
+# Presses a button the way a click would: squash, its action, then boing back.
+func _nav_activate_button(b: Button) -> void:
+	if b.disabled:
+		Sfx.play("cant", -10.0)
+		return
+	b.button_down.emit()
+	b.pressed.emit()
+	get_tree().create_timer(0.08).timeout.connect(func() -> void:
+		if is_instance_valid(b):
+			b.button_up.emit())
+
+
+func _hint_text() -> String:
+	if nav_on and _nav_pad:
+		return "PRESS A TO MILK HER!" if nav_target == cow_btn else "PRESS X TO MILK HER!"
+	if nav_on:
+		return "PRESS SPACE TO MILK HER!"
+	return "CLICK THE COW TO MILK HER!"
 
 
 func _set_tab(t: int) -> void:
@@ -651,9 +981,13 @@ func _process(delta: float) -> void:
 	Farm.tick(delta)
 	_t += delta
 
+	_nav_update(delta)
 	if hint_lbl.visible:
 		hint_lbl.rotation = sin(_t * 3.0) * 0.05
 		hint_lbl.scale = Vector2.ONE * (1.0 + sin(_t * 6.0) * 0.04)
+		var hint: String = _hint_text()
+		if hint_lbl.text != hint:
+			hint_lbl.text = hint
 
 	for f: Dictionary in _floaters:
 		var age: float = float(f["max"]) - float(f["life"])
@@ -907,6 +1241,29 @@ func _draw_fx() -> void:
 	fx.draw_set_transform_matrix(Transform2D.IDENTITY)
 
 
+# The selection: a thick pulsing ring around the selected button and a bouncing arrow
+# pointing at it.
+func _draw_nav() -> void:
+	if nav_target == null or _nav_alpha <= 0.0:
+		return
+	var a: float = _nav_alpha
+	var pulse: float = 0.5 + 0.5 * sin(_t * 8.0)
+	var r: Rect2 = _nav_rect.grow(3.0 + 1.5 * pulse)
+	var ring: PackedVector2Array = Art.rrect(r, clampf(minf(r.size.x, r.size.y) * 0.3, 10.0, 24.0), 6)
+	Art.outline(nav_hl, ring, Color(1.0, 1.0, 1.0, 0.5 * a), 11.0)
+	Art.outline(nav_hl, ring, Color(INK.r, INK.g, INK.b, a), 7.0)
+	Art.outline(nav_hl, ring, Color(1.0, 0.8, 0.1, a).lerp(Color(1.0, 0.97, 0.7, a), pulse * 0.5), 3.6)
+	if nav_target == cow_btn:
+		return  # the big ring says it all (an arrow above her would cover the hint)
+	var bob: float = 3.0 * absf(sin(_t * 6.0))
+	var tip: Vector2 = Vector2(r.position.x - 3.0 - bob, r.get_center().y)
+	var dir: Vector2 = Vector2.RIGHT
+	var side: Vector2 = dir.orthogonal()
+	var arrow: PackedVector2Array = Art.round_poly(PackedVector2Array([
+		tip, tip - dir * 15.0 + side * 10.0, tip - dir * 15.0 - side * 10.0]), 2.5, 3)
+	Art.fill(nav_hl, arrow, Color(1.0, 0.8, 0.1, a), Color(INK.r, INK.g, INK.b, a), 2.8)
+
+
 # =========================================================================================
 # SMOKE TEST (--smoke-test): drives the economy and every tab, then quits. Uses its own
 # save file, so a real save is never touched.
@@ -1009,6 +1366,9 @@ func _run_smoke_test() -> void:
 	for k: int in range(30):
 		_process(0.05)
 
+	# Controller and arrow-key selection, driven with synthetic input events.
+	ok = _smoke_check_nav() and ok
+
 	# Settings: the music toggle flips Farm.music_volume between 0.6 and 0.0.
 	Farm.music_volume = 0.6
 	_on_music_toggle()
@@ -1067,3 +1427,161 @@ func _run_smoke_test() -> void:
 	else:
 		print("UDDERLY_SMOKE_TEST_FAILED")
 		get_tree().quit(1)
+
+
+# Feeds a synthetic input event through Input, the same path a real device takes (it updates
+# the polled state and reaches _unhandled_input / _input).
+func _smoke_send(ev: InputEvent) -> void:
+	Input.parse_input_event(ev)
+	Input.flush_buffered_events()
+
+
+func _smoke_pad(btn: JoyButton, down: bool) -> void:
+	var ev: InputEventJoypadButton = InputEventJoypadButton.new()
+	ev.button_index = btn
+	ev.pressed = down
+	_smoke_send(ev)
+
+
+func _smoke_press(btn: JoyButton) -> void:
+	_smoke_pad(btn, true)
+	_smoke_pad(btn, false)
+
+
+# Taps a d-pad direction: press, a frame, release, a frame.
+func _smoke_dpad(btn: JoyButton) -> void:
+	_smoke_pad(btn, true)
+	_nav_update(0.016)
+	_smoke_pad(btn, false)
+	_nav_update(0.016)
+
+
+func _smoke_stick(v: Vector2) -> void:
+	var ex: InputEventJoypadMotion = InputEventJoypadMotion.new()
+	ex.axis = JOY_AXIS_LEFT_X
+	ex.axis_value = v.x
+	_smoke_send(ex)
+	var ey: InputEventJoypadMotion = InputEventJoypadMotion.new()
+	ey.axis = JOY_AXIS_LEFT_Y
+	ey.axis_value = v.y
+	_smoke_send(ey)
+
+
+func _smoke_key(key: Key) -> void:
+	var ev: InputEventKey = InputEventKey.new()
+	ev.physical_keycode = key
+	ev.pressed = true
+	_smoke_send(ev)
+	_nav_update(0.016)
+	var up: InputEventKey = InputEventKey.new()
+	up.physical_keycode = key
+	_smoke_send(up)
+	_nav_update(0.016)
+
+
+func _smoke_check_nav() -> bool:
+	var ok: bool = true
+	Farm.money = 1.0e15
+	_set_tab(Tab.DAIRY)
+	nav_on = false
+	nav_target = cow_btn
+	_nav_back = null
+
+	# The first d-pad press only shows the ring; after that it moves.
+	_smoke_dpad(JOY_BUTTON_DPAD_RIGHT)
+	ok = _check(nav_on and nav_target == cow_btn, "the first d-pad press should only show the selection") and ok
+	_smoke_dpad(JOY_BUTTON_DPAD_RIGHT)
+	var row: int = biz_icon_btns.find(nav_target)
+	ok = _check(row >= 0, "d-pad right from the cow should select a business icon") and ok
+	row = maxi(row, 0)
+	_smoke_dpad(JOY_BUTTON_DPAD_RIGHT)
+	ok = _check(nav_target == biz_buy_btns[row], "d-pad right from a business icon should select its buy button") and ok
+	var owned_before: int = Farm.owned[row]
+	_smoke_press(JOY_BUTTON_A)
+	ok = _check(Farm.owned[row] > owned_before, "A on a buy button should buy") and ok
+
+	# Left goes back to the cow, A milks her, and right returns to the same row.
+	_smoke_dpad(JOY_BUTTON_DPAD_LEFT)
+	_smoke_dpad(JOY_BUTTON_DPAD_LEFT)
+	ok = _check(nav_target == cow_btn, "d-pad left from the list should reach the cow") and ok
+	var clicks: int = Farm.total_clicks
+	_smoke_press(JOY_BUTTON_A)
+	ok = _check(Farm.total_clicks == clicks + 1, "A on the cow should milk her") and ok
+	_smoke_dpad(JOY_BUTTON_DPAD_RIGHT)
+	ok = _check(nav_target == biz_icon_btns[row], "right from the cow should return to the row the selection came from") and ok
+
+	# The stick: drift under the deadzone does nothing, a push takes one step, and holding
+	# repeats only after NAV_REPEAT_DELAY.
+	_nav_select(biz_buy_btns[0])
+	_smoke_stick(Vector2(0.15, 0.35))
+	for k: int in range(40):
+		_nav_update(0.016)
+	ok = _check(nav_target == biz_buy_btns[0], "stick drift moved the selection") and ok
+	_smoke_stick(Vector2(0.0, 0.9))
+	_nav_update(0.016)
+	ok = _check(nav_target == biz_buy_btns[1], "a stick push down should move one row") and ok
+	for k: int in range(int(NAV_REPEAT_DELAY / 0.016) - 3):
+		_nav_update(0.016)
+	ok = _check(nav_target == biz_buy_btns[1], "holding the stick repeated before the delay") and ok
+	for k: int in range(12):
+		_nav_update(0.016)
+	ok = _check(biz_buy_btns.find(nav_target) >= 2, "holding the stick should repeat after the delay") and ok
+	_smoke_stick(Vector2(0.0, 0.4))  # easing off, but not under NAV_RELEASE: still held, no new step
+	_nav_update(0.016)
+	var at: int = biz_buy_btns.find(nav_target)
+	_smoke_stick(Vector2.ZERO)
+	_nav_update(0.016)
+	_smoke_stick(Vector2(0.0, -0.8))
+	_nav_update(0.016)
+	_smoke_stick(Vector2.ZERO)
+	_nav_update(0.016)
+	ok = _check(biz_buy_btns.find(nav_target) == at - 1, "one stick push up should move exactly one row") and ok
+
+	# Up from the list reaches the tabs, A opens one, and down enters its page.
+	for k: int in range(12):
+		_smoke_dpad(JOY_BUTTON_DPAD_UP)
+	ok = _check(tab_btns.has(nav_target), "d-pad up should reach the tabs") and ok
+	_nav_select(tab_btns[Tab.UPGRADES])
+	_smoke_press(JOY_BUTTON_A)
+	ok = _check(tab == Tab.UPGRADES, "A on a tab should open it") and ok
+	_smoke_dpad(JOY_BUTTON_DPAD_DOWN)
+	ok = _check(upg_btns.has(nav_target), "d-pad down from the tabs should reach an upgrade") and ok
+
+	# RB / LB switch tabs, and the selection follows onto the new page.
+	_smoke_press(JOY_BUTTON_RIGHT_SHOULDER)
+	_nav_update(0.016)
+	ok = _check(tab == Tab.FARMHANDS and nav_target.is_visible_in_tree(), "RB should switch tabs and keep the selection visible") and ok
+	_smoke_press(JOY_BUTTON_LEFT_SHOULDER)
+	ok = _check(tab == Tab.UPGRADES, "LB should go back a tab") and ok
+
+	# B jumps back to the cow; X milks from anywhere.
+	_smoke_press(JOY_BUTTON_B)
+	ok = _check(nav_target == cow_btn, "B should jump back to the cow") and ok
+	_nav_select(tab_btns[0])
+	clicks = Farm.total_clicks
+	_smoke_press(JOY_BUTTON_X)
+	ok = _check(Farm.total_clicks == clicks + 1 and nav_target == tab_btns[0], "X should milk without moving the selection") and ok
+
+	# The welcome-back popup takes the selection and keeps it; B closes it and the selection
+	# comes back.
+	_show_offline(10.0, 60)
+	_nav_update(0.016)
+	ok = _check(nav_target == _collect_btn, "the welcome-back popup should take the selection") and ok
+	_smoke_dpad(JOY_BUTTON_DPAD_LEFT)
+	_smoke_dpad(JOY_BUTTON_DPAD_DOWN)
+	ok = _check(nav_target == _collect_btn, "the selection left the popup") and ok
+	_smoke_press(JOY_BUTTON_B)
+	_nav_update(0.016)
+	ok = _check(not offline_panel.visible and nav_target == tab_btns[0], "B should close the popup and restore the selection") and ok
+
+	# The arrow keys move it too, and moving the mouse hides the ring.
+	_smoke_key(KEY_DOWN)
+	ok = _check(nav_target != tab_btns[0] and nav_on, "the down arrow should move the selection") and ok
+	var mm: InputEventMouseMotion = InputEventMouseMotion.new()
+	mm.relative = Vector2(40.0, 0.0)
+	mm.position = Vector2(400.0, 200.0)
+	_smoke_send(mm)
+	ok = _check(not nav_on, "moving the mouse should hide the selection") and ok
+	nav_target = cow_btn
+	_set_tab(Tab.DAIRY)
+	return ok

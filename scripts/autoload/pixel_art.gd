@@ -380,17 +380,28 @@ func _icon_moon(ci: CanvasItem) -> void:
 	circle(ci, Vector2(-2, 5), 11.0, Color("#e9e4d6"))
 	for c: Vector3 in [Vector3(-7, 3, 2.8), Vector3(1, 11, 2.3), Vector3(3, 3, 1.7), Vector3(-4, 10.5, 1.2)]:
 		circle(ci, Vector2(c.x, c.y), c.z, Color("#cfc7b2"), Color("#a89f88"), 1.0)
-	# A tiny cow standing on the moon.
-	ci.draw_line(Vector2(0, -6), Vector2(0, -3), INK, 2.0, true)
-	ci.draw_line(Vector2(7, -6), Vector2(7.5, -2.2), INK, 2.0, true)
-	fill(ci, rrect(Rect2(-2.5, -13, 12, 7.5), 3.0), WHITE, INK, 1.8)
-	for sp: PackedVector2Array in clip(rrect(Rect2(-2.5, -13, 12, 7.5), 3.0), blob(Vector2(1.5, -11), 2.6, 0.5, 0.25, 14)):
-		ci.draw_colored_polygon(sp, Color("#2f2a36"))
-	outline(ci, rrect(Rect2(-2.5, -13, 12, 7.5), 3.0), INK, 1.8)
-	circle(ci, Vector2(11, -13.5), 3.6, WHITE, INK, 1.8)
-	fill(ci, ellipse(Vector2(12.3, -11.8), 2.6, 1.7), PINK, INK, 1.2)
-	ci.draw_circle(Vector2(10.5, -15), 0.8, INK, true, -1.0, true)
-	ci.draw_line(Vector2(-2.5, -11), Vector2(-5, -8), INK, 1.4, true)
+	# A tiny cow standing on the moon, drawn like the big one (scripts/cow.gd): a big round
+	# head on a small body, a black ear, a pink muzzle and a shiny eye.
+	ci.draw_line(Vector2(-0.5, -7), Vector2(-0.5, -3.2), INK, 2.2, true)
+	ci.draw_line(Vector2(5.5, -7), Vector2(5.8, -3.6), INK, 2.2, true)
+	ci.draw_line(Vector2(-3, -11), Vector2(-5.5, -8), INK, 1.4, true)
+	var body: PackedVector2Array = rrect(Rect2(-3.5, -13, 11, 7), 3.4)
+	fill(ci, body, WHITE, INK, 1.6)
+	for sp: PackedVector2Array in clip(body, blob(Vector2(0.5, -11), 2.4, 0.5, 0.15, 14)):
+		ci.draw_colored_polygon(sp, Color("#3b3440"))
+	outline(ci, body, INK, 1.6)
+	fill(ci, ellipse(Vector2(5.8, -17.2), 2.6, 1.5, -0.5), Color("#3b3440"), INK, 1.2)
+	# Head and muzzle share one outline, so the muzzle reads as a snout, not an open mouth.
+	var head: PackedVector2Array = ellipse(Vector2(10, -15), 5.0, 5.0, 0.0, 24)
+	var snout: PackedVector2Array = ellipse(Vector2(11.8, -12.3), 3.4, 2.4, 0.0, 20)
+	ci.draw_colored_polygon(head, WHITE)
+	ci.draw_colored_polygon(snout, PINK)
+	var both: Array[PackedVector2Array] = Geometry2D.merge_polygons(head, snout)  # one shape: they overlap
+	outline(ci, both[0] if both.size() > 0 else head, INK, 1.6)
+	ci.draw_circle(Vector2(13.8, -12.9), 0.6, PINK_DARK, true, -1.0, true)
+	ci.draw_circle(Vector2(7.4, -13.4), 1.1, Color(1.0, 0.45, 0.58, 0.55), true, -1.0, true)
+	ci.draw_circle(Vector2(10.6, -16.4), 1.1, INK, true, -1.0, true)
+	ci.draw_circle(Vector2(10.2, -16.8), 0.4, Color.WHITE, true, -1.0, true)
 
 
 func _icon_coin(ci: CanvasItem) -> void:
