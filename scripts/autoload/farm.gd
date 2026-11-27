@@ -46,7 +46,25 @@ func _ready() -> void:
 	reset_pasture()
 	if "--smoke-test" not in OS.get_cmdline_user_args():
 		load_game()
+		fit_window_to_screen()
 		apply_display()
+
+
+# The window opens at 1280x720 (the project setting), which is small on a 1440p or 4K screen.
+# Grow it to about 80% of the screen, keeping 16:9, and centre it. Everything is drawn as
+# vectors at the real window resolution, so a bigger window is sharper, not blurrier. This
+# never shrinks the window. It runs before apply_display(), so leaving fullscreen comes back
+# to this size.
+func fit_window_to_screen() -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	var area: Rect2i = DisplayServer.screen_get_usable_rect(DisplayServer.window_get_current_screen())
+	var k: float = minf(float(area.size.x) * 0.8 / 640.0, float(area.size.y) * 0.8 / 360.0)
+	var want: Vector2i = Vector2i(roundi(640.0 * k), roundi(360.0 * k))
+	if want.x <= DisplayServer.window_get_size().x:
+		return
+	DisplayServer.window_set_size(want)
+	DisplayServer.window_set_position(area.position + (area.size - want) / 2)
 
 
 # Puts the window in or out of fullscreen to match `fullscreen`. A maximized window counts as

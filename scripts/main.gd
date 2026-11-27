@@ -13,6 +13,7 @@ extends Node2D
 const Data = preload("res://scripts/game_data.gd")
 const Fmt = preload("res://scripts/num_fmt.gd")
 const Cow = preload("res://scripts/cow.gd")
+const Pails = preload("res://scripts/milk_pails.gd")
 const FarmScene = preload("res://scripts/farm_scene.gd")
 
 const W: float = 640.0
@@ -1625,6 +1626,9 @@ func _run_smoke_test() -> void:
 	var moo: Array = Sfx._variants.get("moo", [])
 	ok = _check(sq.size() >= 3 and moo.size() >= 3, "missing squeeze or moo takes") and ok
 
+	# Milk goes into pails, never on the grass, and the wagon collects the full ones.
+	ok = _smoke_check_pails() and ok
+
 	# DELETE SAVE asks first; B and KEEP MY FARM back out, YES, DELETE wipes the farm.
 	ok = _smoke_check_delete_save() and ok
 
@@ -1788,6 +1792,58 @@ func _smoke_check_settings() -> bool:
 # DELETE SAVE opens "ARE YOU SURE?" with KEEP MY FARM selected; B, Esc, KEEP and a click outside
 # back out with nothing deleted and the selection back on DELETE; YES, DELETE wipes the farm,
 # cowbells and stats (on disk too), keeps the settings, and closes both popups.
+# Drives the cow's clock by hand (cow._process) and checks the pails: every drop lands in a
+# pail, a full one waits beside the cow while a fresh one takes its place, the wagon comes
+# COLLECT_WAIT seconds later (or at once when both waiting spots are taken) and takes them,
+# and very fast clicking can't overfill anything. It leaves the wagon on screen, loading, so
+# the real frames at the end of the smoke test draw every part of it.
+func _smoke_check_pails() -> bool:
+	var ok: bool = true
+	var c: Cow = cow as Cow
+	c.pails = Pails.new()
+	var pl: Pails = c.pails
+	var step: Callable = func(seconds: float) -> void:
+		for i: int in range(roundi(seconds * 60.0)):
+			c._process(1.0 / 60.0)
+	for k: int in range(Pails.PAIL_SQUEEZES):
+		c.squeeze()
+		step.call(0.12)
+	step.call(1.0)
+	ok = _check(pl.spawned > 0 and pl.caught == pl.spawned, "every milk drop should land in the pail (%d of %d)" % [pl.caught, pl.spawned]) and ok
+	ok = _check(pl.waiting.size() == 1 and pl.level < 0.01, "a full pail should wait beside the cow (waiting %d, level %.2f)" % [pl.waiting.size(), pl.level]) and ok
+	ok = _check(pl.wagon == Pails.Wagon.AWAY, "the wagon came before COLLECT_WAIT") and ok
+	step.call(Pails.COLLECT_WAIT + 3.5)
+	ok = _check(pl.collected == 1 and pl.waiting.is_empty() and pl.wagon == Pails.Wagon.AWAY,
+		"the wagon should have taken 1 pail away (collected %d, waiting %d)" % [pl.collected, pl.waiting.size()]) and ok
+
+	for k: int in range(Pails.PAIL_SQUEEZES * 2):
+		c.squeeze()
+		step.call(0.1)
+	step.call(0.8)
+	ok = _check(pl.wagon != Pails.Wagon.AWAY, "two waiting pails should call the wagon at once") and ok
+	step.call(4.0)
+	ok = _check(pl.collected == 3 and pl.waiting.is_empty(), "the wagon should have taken 3 pails, took %d" % pl.collected) and ok
+	ok = _check(pl.caught == pl.spawned and pl.particle_count() == 0,
+		"milk left over (caught %d of %d drops, %d particles alive)" % [pl.caught, pl.spawned, pl.particle_count()]) and ok
+
+	# Clicking far faster than the wagon can keep up.
+	var worst_wait: int = 0
+	var worst_level: float = 0.0
+	for k: int in range(Pails.PAIL_SQUEEZES * 6):
+		c.squeeze()
+		c._process(1.0 / 60.0)
+		worst_wait = maxi(worst_wait, pl.waiting.size())
+		worst_level = maxf(worst_level, pl.level)
+	ok = _check(worst_wait <= Pails.MAX_WAITING and worst_level <= 1.0, "pails overflowed (waiting %d, level %.2f)" % [worst_wait, worst_level]) and ok
+	ok = _check(pl.particle_count() <= Pails.MAX_PARTICLES, "too many milk particles: %d" % pl.particle_count()) and ok
+	var spins: int = 0
+	while spins < 600 and not (pl.wagon == Pails.Wagon.LOADING and not pl.hopping.is_empty()):
+		c._process(1.0 / 60.0)
+		spins += 1
+	ok = _check(spins < 600, "the wagon never came back to load the backlog") and ok
+	return ok
+
+
 func _smoke_check_delete_save() -> bool:
 	var ok: bool = true
 	Farm.money = 5.0e9
