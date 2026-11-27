@@ -97,6 +97,11 @@ var set_music_btns: Array[Button] = []  # [-, +]
 var set_sfx_btns: Array[Button] = []    # [-, +]
 var set_numbers_btn: Button
 var _settings_done_btn: Button
+var set_delete_btn: Button
+var confirm_panel: Control           # "ARE YOU SURE?" before deleting the save
+var confirm_card: Panel
+var _confirm_keep_btn: Button
+var _confirm_delete_btn: Button
 # Welcome-back popup
 var offline_panel: Control
 var offline_card: Panel
@@ -353,6 +358,7 @@ func _build_ui() -> void:
 
 	_build_offline_popup()
 	_build_settings_popup()
+	_build_delete_confirm()
 	nav_hl = _canvas(ui, Rect2(0.0, 0.0, W, H), func(_c: Control) -> void: _draw_nav())
 
 
@@ -523,7 +529,8 @@ func _build_offline_popup() -> void:
 
 
 # The gear's popup: DISPLAY (windowed / fullscreen), MUSIC and SOUND volume in 10% steps,
-# NUMBERS (how big numbers are written), SAVE NOW and DONE. Every change saves at once.
+# NUMBERS (how big numbers are written), SAVE NOW, DELETE SAVE (asks first) and DONE.
+# Every change saves at once.
 func _build_settings_popup() -> void:
 	settings_panel = Control.new()
 	settings_panel.size = Vector2(W, H)
@@ -538,8 +545,8 @@ func _build_settings_popup() -> void:
 	settings_panel.add_child(dim)
 
 	settings_card = Panel.new()
-	settings_card.position = Vector2(170.0, 66.0)
-	settings_card.size = Vector2(300.0, 236.0)
+	settings_card.position = Vector2(170.0, 46.0)
+	settings_card.size = Vector2(300.0, 272.0)
 	settings_card.pivot_offset = settings_card.size * 0.5
 	settings_card.add_theme_stylebox_override("panel", _sb(COL_CREAM, COL_WOOD, 4, 18, 6, 10))
 	settings_panel.add_child(settings_card)
@@ -549,7 +556,7 @@ func _build_settings_popup() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 
-	var names: Array[String] = ["DISPLAY", "MUSIC", "SOUND", "NUMBERS"]
+	var names: Array[String] = ["DISPLAY", "MUSIC", "SOUND", "NUMBERS", "SAVE FILE"]
 	for r: int in range(names.size()):
 		var lbl: Label = _label(settings_card, Vector2(20.0, 34.0 + 36.0 * float(r)), Vector2(100.0, 30.0), names[r], COL_TEXT, 12)
 		lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -569,12 +576,82 @@ func _build_settings_popup() -> void:
 			set_sfx_lbl = val
 			set_sfx_btns = [minus, plus]
 	set_numbers_btn = _button(settings_card, Vector2(122.0, 142.0), Vector2(160.0, 30.0), "", _cycle_number_style, "cream", 11)
-	_button(settings_card, Vector2(20.0, 188.0), Vector2(124.0, 32.0), "SAVE NOW", func() -> void:
+	_button(settings_card, Vector2(122.0, 178.0), Vector2(77.0, 30.0), "SAVE NOW", func() -> void:
 		Farm.save_game()
 		Sfx.play("ui")
 		_toast("GAME SAVED", COL_GREEN)
-	, "cream", 12)
-	_settings_done_btn = _button(settings_card, Vector2(156.0, 188.0), Vector2(126.0, 32.0), "DONE", _close_settings, "green", 14)
+	, "cream", 11)
+	set_delete_btn = _button(settings_card, Vector2(205.0, 178.0), Vector2(77.0, 30.0), "DELETE", _open_delete_confirm, "red", 11)
+	_settings_done_btn = _button(settings_card, Vector2(87.0, 224.0), Vector2(126.0, 32.0), "DONE", _close_settings, "green", 14)
+
+
+# DELETE SAVE's "are you sure?" popup, on top of settings. KEEP MY FARM is selected first, so
+# pressing A twice by accident doesn't delete anything.
+func _build_delete_confirm() -> void:
+	confirm_panel = Control.new()
+	confirm_panel.size = Vector2(W, H)
+	confirm_panel.visible = false
+	ui.add_child(confirm_panel)
+	var dim: ColorRect = ColorRect.new()
+	dim.size = Vector2(W, H)
+	dim.color = Color(0.1, 0.05, 0.02, 0.35)
+	dim.gui_input.connect(func(ev: InputEvent) -> void:  # a click outside = keep
+		if ev is InputEventMouseButton and (ev as InputEventMouseButton).pressed:
+			_close_delete_confirm())
+	confirm_panel.add_child(dim)
+
+	confirm_card = Panel.new()
+	confirm_card.position = Vector2(175.0, 96.0)
+	confirm_card.size = Vector2(290.0, 178.0)
+	confirm_card.pivot_offset = confirm_card.size * 0.5
+	confirm_card.add_theme_stylebox_override("panel", _sb(COL_CREAM, COL_BARN, 4, 18, 6, 10))
+	confirm_panel.add_child(confirm_card)
+	var ribbon: Panel = _panel(confirm_card, Rect2(35.0, -16.0, 220.0, 38.0), _sb(COL_BARN, INK, 2, 12, 5, 3))
+	var title: Label = _label(ribbon, Vector2(0.0, 0.0), Vector2(220.0, 33.0), "ARE YOU SURE?", Color.WHITE, 20, 5)
+	title.add_theme_font_override("font", Art.font_bold)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	var msg: Label = _label(confirm_card, Vector2(18.0, 32.0), Vector2(254.0, 88.0),
+		"THIS DELETES YOUR WHOLE FARM: MONEY, BUSINESSES, FARMHANDS, UPGRADES, GOLDEN COWBELLS AND STATS.\nYOU CAN'T UNDO IT.",
+		COL_TEXT, 11)
+	msg.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	msg.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	msg.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_confirm_keep_btn = _button(confirm_card, Vector2(18.0, 128.0), Vector2(124.0, 34.0), "KEEP MY FARM", _close_delete_confirm, "green", 12)
+	_confirm_delete_btn = _button(confirm_card, Vector2(148.0, 128.0), Vector2(124.0, 34.0), "YES, DELETE", _confirm_delete_save, "red", 12)
+
+
+func _open_delete_confirm() -> void:
+	if confirm_panel.visible:
+		return
+	confirm_panel.visible = true
+	nav_target = _confirm_keep_btn  # set directly, so the selection behind settings is still remembered
+	confirm_card.scale = Vector2(0.5, 0.5)
+	var tw: Tween = confirm_card.create_tween()
+	tw.tween_property(confirm_card, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	Sfx.play("cant", -6.0)
+
+
+func _close_delete_confirm() -> void:
+	if not confirm_panel.visible:
+		return
+	confirm_panel.visible = false
+	nav_target = set_delete_btn
+	Sfx.play("ui", -6.0)
+
+
+func _confirm_delete_save() -> void:
+	confirm_panel.visible = false
+	settings_panel.visible = false
+	Farm.reset_save()
+	_floaters.clear()
+	_set_tab(Tab.DAIRY)
+	hint_lbl.visible = true
+	_nav_saved = null
+	nav_target = cow_btn
+	_refresh_all()
+	Sfx.play("moo")
+	_toast("SAVE DELETED. A FRESH START!", COL_BARN)
 
 
 func _open_settings() -> void:
@@ -641,6 +718,8 @@ func _cycle_number_style() -> void:
 
 # The popup that owns the selection and input right now, or null.
 func _open_card() -> Control:
+	if confirm_panel.visible:
+		return confirm_card
 	if offline_panel.visible:
 		return offline_card
 	if settings_panel.visible:
@@ -703,6 +782,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_ESCAPE:
 				if offline_panel.visible:
 					_nav_activate_button(_collect_btn)
+				elif confirm_panel.visible:
+					_close_delete_confirm()
 				elif settings_panel.visible:
 					_close_settings()
 				elif nav_on:
@@ -727,13 +808,17 @@ func _unhandled_input(event: InputEvent) -> void:
 				_nav_wake()
 				if offline_panel.visible:
 					_nav_activate_button(_collect_btn)
+				elif confirm_panel.visible:
+					_close_delete_confirm()
 				elif settings_panel.visible:
 					_close_settings()
 				elif nav_target != cow_btn:
 					_nav_select(cow_btn)
 			JOY_BUTTON_START:
 				_nav_wake()
-				if settings_panel.visible:
+				if confirm_panel.visible:
+					_close_delete_confirm()
+				elif settings_panel.visible:
 					_close_settings()
 				else:
 					_open_settings()
@@ -900,7 +985,12 @@ func _nav_validate() -> void:
 	if card != null:
 		if nav_target == null or not card.is_ancestor_of(nav_target):
 			_nav_saved = nav_target
-			nav_target = _collect_btn if card == offline_card else set_display_btn
+			if card == offline_card:
+				nav_target = _collect_btn
+			elif card == confirm_card:
+				nav_target = _confirm_keep_btn
+			else:
+				nav_target = set_display_btn
 		return
 	if nav_target != null and is_instance_valid(nav_target) and nav_target.is_visible_in_tree():
 		return
@@ -1535,6 +1625,9 @@ func _run_smoke_test() -> void:
 	var moo: Array = Sfx._variants.get("moo", [])
 	ok = _check(sq.size() >= 3 and moo.size() >= 3, "missing squeeze or moo takes") and ok
 
+	# DELETE SAVE asks first; B and KEEP MY FARM back out, YES, DELETE wipes the farm.
+	ok = _smoke_check_delete_save() and ok
+
 	# Let a few real frames run so every draw callback (cow, farm, bars, icons, MOO RUSH,
 	# the welcome-back popup) executes at least once.
 	Farm.rush_left = 2.0
@@ -1688,6 +1781,67 @@ func _smoke_check_settings() -> bool:
 	_nav_activate_button(_settings_done_btn)
 	ok = _check(not settings_panel.visible, "DONE should close settings") and ok
 	nav_target = cow_btn
+	nav_on = false
+	return ok
+
+
+# DELETE SAVE opens "ARE YOU SURE?" with KEEP MY FARM selected; B, Esc, KEEP and a click outside
+# back out with nothing deleted and the selection back on DELETE; YES, DELETE wipes the farm,
+# cowbells and stats (on disk too), keeps the settings, and closes both popups.
+func _smoke_check_delete_save() -> bool:
+	var ok: bool = true
+	Farm.money = 5.0e9
+	Farm.bells = 7
+	Farm.total_earned = 9.0e9
+	Farm.total_clicks = 321
+	Farm.owned[1] = 12
+	Farm.music_volume = 0.4
+	Fmt.style = Fmt.Style.SHORT
+	Farm.save_game()
+	_nav_pad = true
+	nav_on = true
+	_nav_select(settings_btn)
+	_smoke_press(JOY_BUTTON_A)
+	_nav_update(0.016)
+	_nav_select(set_delete_btn)
+	_smoke_press(JOY_BUTTON_A)
+	_nav_update(0.016)
+	ok = _check(confirm_panel.visible and nav_target == _confirm_keep_btn, "DELETE should ask first, with KEEP MY FARM selected") and ok
+	_smoke_dpad(JOY_BUTTON_DPAD_UP)
+	_smoke_dpad(JOY_BUTTON_DPAD_LEFT)
+	ok = _check(confirm_card.is_ancestor_of(nav_target), "the selection left the are-you-sure popup") and ok
+	_smoke_press(JOY_BUTTON_RIGHT_SHOULDER)
+	_smoke_press(JOY_BUTTON_B)
+	_nav_update(0.016)
+	ok = _check(not confirm_panel.visible and settings_panel.visible and nav_target == set_delete_btn, "B should back out to settings, on DELETE") and ok
+	_smoke_press(JOY_BUTTON_A)
+	_smoke_press(JOY_BUTTON_A)  # a double press lands on KEEP MY FARM, never on delete
+	_nav_update(0.016)
+	ok = _check(not confirm_panel.visible and Farm.bells == 7, "pressing A twice on DELETE should keep the farm") and ok
+	_open_delete_confirm()
+	_smoke_key(KEY_ESCAPE)
+	ok = _check(not confirm_panel.visible and settings_panel.visible, "Esc should back out of the are-you-sure popup") and ok
+	_open_delete_confirm()
+	var click: InputEventMouseButton = InputEventMouseButton.new()
+	click.pressed = true
+	click.button_index = MOUSE_BUTTON_LEFT
+	(confirm_panel.get_child(0) as ColorRect).gui_input.emit(click)
+	ok = _check(not confirm_panel.visible and Farm.money == 5.0e9 and Farm.owned[1] == 12, "a click outside should keep the farm") and ok
+
+	_open_delete_confirm()
+	_nav_activate_button(_confirm_delete_btn)
+	ok = _check(not confirm_panel.visible and not settings_panel.visible, "deleting should close both popups") and ok
+	ok = _check(Farm.money == 0.0 and Farm.bells == 0 and Farm.total_earned == 0.0 and Farm.total_clicks == 0
+		and Farm.owned[0] == 1 and Farm.owned[1] == 0 and Farm.upgrades.is_empty() and tab == Tab.DAIRY, "YES, DELETE should wipe the farm") and ok
+	ok = _check(is_equal_approx(Farm.music_volume, 0.4) and Fmt.style == Fmt.Style.SHORT, "deleting the save should keep the settings") and ok
+	Farm.money = 77.0
+	Farm.bells = 3
+	Farm.load_game()
+	ok = _check(Farm.bells == 0 and Farm.money < 1.0 and Farm.total_clicks == 0, "the deleted save came back after loading") and ok
+	_nav_update(0.016)
+	ok = _check(nav_target == cow_btn, "after deleting, the selection should be on the cow") and ok
+	Farm.music_volume = 0.6
+	Fmt.style = Fmt.Style.WORDS
 	nav_on = false
 	return ok
 

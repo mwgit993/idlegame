@@ -9,7 +9,7 @@ An idle game about milking a cow and growing a dairy empire, made in **Godot 4.7
 - **Farmhands.** Hire one per business and it runs by itself, even while the game is closed. You'll be greeted with what they earned when you come back.
 - **Upgrades.** One-time multipliers for a business, for everything, or for your squeezes.
 - **Golden cowbells (prestige).** On the PASTURE tab, move to a bigger pasture: your farm resets, but you keep your cowbells and earn new ones from everything you've ever made. Each cowbell adds +2% profit.
-- **Settings.** The gear at the right end of the top bar opens SETTINGS: windowed or fullscreen, music and sound volume (10% steps), how big numbers are written (`$1.500 BILLION`, `$1.50B` or `$1.500e9`), and SAVE NOW. Every change is saved.
+- **Settings.** The gear at the right end of the top bar opens SETTINGS: windowed or fullscreen, music and sound volume (10% steps), how big numbers are written (`$1.500 BILLION`, `$1.50B` or `$1.500e9`), SAVE NOW, and DELETE, which asks "ARE YOU SURE?" before wiping your farm, cowbells and stats (your settings stay). Every change is saved.
 
 The game saves every 10 seconds and when you close it.
 

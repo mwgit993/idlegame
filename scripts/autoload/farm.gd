@@ -421,7 +421,11 @@ func load_game() -> void:
 		last_offline_earned = apply_offline(float(away))
 
 
+# Settings -> DELETE SAVE: a brand-new farm with no cowbells or stats. Settings (volume,
+# fullscreen, number style) are kept.
 func reset_save() -> void:
+	last_offline_earned = 0.0
+	last_offline_seconds = 0
 	bells = 0
 	total_earned = 0.0
 	total_clicks = 0
