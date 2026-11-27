@@ -87,8 +87,16 @@ var hand_lbls: Array[Label] = []
 var hand_sub_lbls: Array[Label] = []
 var pasture_lbl: Label
 var move_btn: Button
-var sfx_btn: Button
-var music_btn: Button
+var settings_btn: Button             # the gear at the right end of the top bar
+var settings_panel: Control
+var settings_card: Panel
+var set_display_btn: Button
+var set_music_lbl: Label
+var set_sfx_lbl: Label
+var set_music_btns: Array[Button] = []  # [-, +]
+var set_sfx_btns: Array[Button] = []    # [-, +]
+var set_numbers_btn: Button
+var _settings_done_btn: Button
 # Welcome-back popup
 var offline_panel: Control
 var offline_card: Panel
@@ -344,6 +352,7 @@ func _build_ui() -> void:
 	toast_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
 	_build_offline_popup()
+	_build_settings_popup()
 	nav_hl = _canvas(ui, Rect2(0.0, 0.0, W, H), func(_c: Control) -> void: _draw_nav())
 
 
@@ -383,9 +392,14 @@ func _build_top_bar() -> void:
 	money_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	rate_lbl = _label(ui, Vector2(31.0, 20.0), Vector2(200.0, 12.0), "", COL_LIGHT, FS_SMALL, 3)
 	for t: int in range(4):
-		var b: Button = _button(ui, Vector2(RX - 4.0 + float(t) * 100.0, 4.0), Vector2(96.0, 25.0), TAB_NAMES[t], _set_tab.bind(t), "cream", 12)
+		var b: Button = _button(ui, Vector2(RX - 4.0 + float(t) * 92.0, 4.0), Vector2(88.0, 25.0), TAB_NAMES[t], _set_tab.bind(t), "cream", 12)
 		b.draw.connect(_draw_tab_badge.bind(b, t))
 		tab_btns.append(b)
+	settings_btn = _button(ui, Vector2(RX - 4.0 + 4.0 * 92.0 + 2.0, 4.0), Vector2(30.0, 25.0), "", _open_settings, "cream", 12)
+	settings_btn.tooltip_text = "SETTINGS"
+	settings_btn.draw.connect(func() -> void:
+		var dy: float = 1.0 if settings_btn.button_pressed else 0.0
+		Art.draw_icon(settings_btn, "gear", settings_btn.size * 0.5 + Vector2(0.0, dy - 1.0), 21.0))
 
 
 func _row_card(page: Control, ry: float, h: float) -> Panel:
@@ -459,18 +473,11 @@ func _build_pasture_page(page: Control) -> void:
 	var title: Label = _label(page, Vector2(RX + 38.0, 42.0), Vector2(300.0, 28.0), "GOLDEN COWBELLS", COL_GOLD, 18, 5)
 	title.add_theme_font_override("font", Art.font_bold)
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_row_card(page, 74.0, 180.0)
-	pasture_lbl = _label(page, Vector2(RX + 6.0, 79.0), Vector2(380.0, 172.0), "", COL_TEXT, 10)
+	_row_card(page, 74.0, 214.0)
+	pasture_lbl = _label(page, Vector2(RX + 6.0, 79.0), Vector2(380.0, 206.0), "", COL_TEXT, 10)
 	pasture_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	pasture_lbl.add_theme_constant_override("line_spacing", 0)
-	move_btn = _button(page, Vector2(RX + 34.0, 262.0), Vector2(322.0, 34.0), "", _on_move_pasture, "gold", 13)
-	sfx_btn = _button(page, Vector2(RX, 318.0), Vector2(124.0, 28.0), "", _on_sfx_toggle, "cream", 11)
-	music_btn = _button(page, Vector2(RX + 132.0, 318.0), Vector2(124.0, 28.0), "", _on_music_toggle, "cream", 11)
-	_button(page, Vector2(RX + 264.0, 318.0), Vector2(124.0, 28.0), "SAVE NOW", func() -> void:
-		Farm.save_game()
-		Sfx.play("ui")
-		_toast("GAME SAVED", COL_GREEN)
-	, "green", 11)
+	move_btn = _button(page, Vector2(RX + 34.0, 302.0), Vector2(322.0, 38.0), "", _on_move_pasture, "gold", 13)
 
 
 func _build_offline_popup() -> void:
@@ -513,6 +520,132 @@ func _build_offline_popup() -> void:
 		_hide_offline()
 		Sfx.play("coin")
 	, "green", 16)
+
+
+# The gear's popup: DISPLAY (windowed / fullscreen), MUSIC and SOUND volume in 10% steps,
+# NUMBERS (how big numbers are written), SAVE NOW and DONE. Every change saves at once.
+func _build_settings_popup() -> void:
+	settings_panel = Control.new()
+	settings_panel.size = Vector2(W, H)
+	settings_panel.visible = false
+	ui.add_child(settings_panel)
+	var dim: ColorRect = ColorRect.new()
+	dim.size = Vector2(W, H)
+	dim.color = Color(0.1, 0.05, 0.02, 0.45)
+	dim.gui_input.connect(func(ev: InputEvent) -> void:  # a click outside the card closes it
+		if ev is InputEventMouseButton and (ev as InputEventMouseButton).pressed:
+			_close_settings())
+	settings_panel.add_child(dim)
+
+	settings_card = Panel.new()
+	settings_card.position = Vector2(170.0, 66.0)
+	settings_card.size = Vector2(300.0, 236.0)
+	settings_card.pivot_offset = settings_card.size * 0.5
+	settings_card.add_theme_stylebox_override("panel", _sb(COL_CREAM, COL_WOOD, 4, 18, 6, 10))
+	settings_panel.add_child(settings_card)
+	var ribbon: Panel = _panel(settings_card, Rect2(40.0, -16.0, 220.0, 38.0), _sb(COL_BARN, INK, 2, 12, 5, 3))
+	var title: Label = _label(ribbon, Vector2(0.0, 0.0), Vector2(220.0, 33.0), "SETTINGS", Color.WHITE, 20, 5)
+	title.add_theme_font_override("font", Art.font_bold)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+
+	var names: Array[String] = ["DISPLAY", "MUSIC", "SOUND", "NUMBERS"]
+	for r: int in range(names.size()):
+		var lbl: Label = _label(settings_card, Vector2(20.0, 34.0 + 36.0 * float(r)), Vector2(100.0, 30.0), names[r], COL_TEXT, 12)
+		lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	set_display_btn = _button(settings_card, Vector2(122.0, 34.0), Vector2(160.0, 30.0), "", _toggle_fullscreen, "cream", 11)
+	for r: int in range(2):
+		var music: bool = r == 0
+		var y: float = 70.0 + 36.0 * float(r)
+		var minus: Button = _button(settings_card, Vector2(122.0, y), Vector2(38.0, 30.0), "-", _adjust_volume.bind(music, -1), "cream", 16)
+		var val: Label = _label(settings_card, Vector2(160.0, y), Vector2(84.0, 30.0), "", COL_TEXT, 13)
+		val.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		val.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		var plus: Button = _button(settings_card, Vector2(244.0, y), Vector2(38.0, 30.0), "+", _adjust_volume.bind(music, 1), "cream", 16)
+		if music:
+			set_music_lbl = val
+			set_music_btns = [minus, plus]
+		else:
+			set_sfx_lbl = val
+			set_sfx_btns = [minus, plus]
+	set_numbers_btn = _button(settings_card, Vector2(122.0, 142.0), Vector2(160.0, 30.0), "", _cycle_number_style, "cream", 11)
+	_button(settings_card, Vector2(20.0, 188.0), Vector2(124.0, 32.0), "SAVE NOW", func() -> void:
+		Farm.save_game()
+		Sfx.play("ui")
+		_toast("GAME SAVED", COL_GREEN)
+	, "cream", 12)
+	_settings_done_btn = _button(settings_card, Vector2(156.0, 188.0), Vector2(126.0, 32.0), "DONE", _close_settings, "green", 14)
+
+
+func _open_settings() -> void:
+	if offline_panel.visible or settings_panel.visible:
+		return
+	Farm.fullscreen = Farm.window_is_fullscreen()
+	_refresh_settings()
+	settings_panel.visible = true
+	settings_card.scale = Vector2(0.5, 0.5)
+	var tw: Tween = settings_card.create_tween()
+	tw.tween_property(settings_card, "scale", Vector2.ONE, 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	Sfx.play("ui")
+
+
+func _close_settings() -> void:
+	if not settings_panel.visible:
+		return
+	settings_panel.visible = false
+	Sfx.play("ui", -6.0)
+
+
+func _refresh_settings() -> void:
+	set_display_btn.text = "FULLSCREEN" if Farm.fullscreen else "WINDOWED"
+	set_music_lbl.text = _volume_text(Farm.music_volume)
+	set_sfx_lbl.text = _volume_text(Farm.sfx_volume)
+	set_numbers_btn.text = Fmt.money(1.5e9)
+	_set_font_size(set_numbers_btn, _fit_size(set_numbers_btn.get_theme_font("font"), set_numbers_btn.text, set_numbers_btn.size.x - 16.0, 11, 8))
+	_refresh_all()
+
+
+func _volume_text(v: float) -> String:
+	return "OFF" if v <= 0.001 else "%d%%" % roundi(v * 100.0)
+
+
+func _toggle_fullscreen() -> void:
+	Farm.fullscreen = not Farm.window_is_fullscreen()
+	Farm.apply_display()
+	Farm.save_game()
+	Sfx.play("ui")
+	if settings_panel.visible:
+		_refresh_settings()
+
+
+# Music and sound move in 10% steps between OFF and 100%. The music player and Sfx read the
+# Farm values every time, so the change is heard at once (the click plays at the new level).
+func _adjust_volume(music: bool, dir: int) -> void:
+	var v: float = Farm.music_volume if music else Farm.sfx_volume
+	v = clampf(snappedf(v + 0.1 * float(dir), 0.1), 0.0, 1.0)
+	if music:
+		Farm.music_volume = v
+	else:
+		Farm.sfx_volume = v
+	Farm.save_game()
+	Sfx.play("ui")
+	_refresh_settings()
+
+
+func _cycle_number_style() -> void:
+	Fmt.style = (Fmt.style + 1) % Fmt.STYLE_COUNT
+	Farm.save_game()
+	Sfx.play("ui")
+	_refresh_settings()
+
+
+# The popup that owns the selection and input right now, or null.
+func _open_card() -> Control:
+	if offline_panel.visible:
+		return offline_card
+	if settings_panel.visible:
+		return settings_card
+	return null
 
 
 func _show_offline(amount: float, seconds: int) -> void:
@@ -570,8 +703,12 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_ESCAPE:
 				if offline_panel.visible:
 					_nav_activate_button(_collect_btn)
+				elif settings_panel.visible:
+					_close_settings()
 				elif nav_on:
 					_nav_select(cow_btn)
+			KEY_F11:
+				_toggle_fullscreen()
 			KEY_B:
 				_set_buy_mode((buy_mode + 1) % BUY_MODES.size())
 			KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN:
@@ -590,17 +727,25 @@ func _unhandled_input(event: InputEvent) -> void:
 				_nav_wake()
 				if offline_panel.visible:
 					_nav_activate_button(_collect_btn)
+				elif settings_panel.visible:
+					_close_settings()
 				elif nav_target != cow_btn:
 					_nav_select(cow_btn)
+			JOY_BUTTON_START:
+				_nav_wake()
+				if settings_panel.visible:
+					_close_settings()
+				else:
+					_open_settings()
 			JOY_BUTTON_X:
 				_on_squeeze()
 			JOY_BUTTON_Y:
 				_set_buy_mode((buy_mode + 1) % BUY_MODES.size())
 			JOY_BUTTON_LEFT_SHOULDER:
-				if not offline_panel.visible:
+				if _open_card() == null:
 					_set_tab((int(tab) + 3) % 4)
 			JOY_BUTTON_RIGHT_SHOULDER:
-				if not offline_panel.visible:
+				if _open_card() == null:
 					_set_tab((int(tab) + 1) % 4)
 			JOY_BUTTON_DPAD_UP:
 				_nav_tap = Vector2i.UP
@@ -739,7 +884,8 @@ func _nav_update(delta: float) -> void:
 # buttons can.
 func _nav_targets() -> Array[Control]:
 	var out: Array[Control] = []
-	var root: Node = offline_card if offline_panel.visible else ui
+	var card: Control = _open_card()
+	var root: Node = card if card != null else ui
 	for n: Node in root.find_children("*", "Button", true, false):
 		var b: Button = n as Button
 		if b.is_visible_in_tree():
@@ -750,10 +896,11 @@ func _nav_targets() -> Array[Control]:
 # Keeps the selection on something that can be pressed: into the popup while it is open,
 # back to where it was when it closes, and to the nearest button when a page changes.
 func _nav_validate() -> void:
-	if offline_panel.visible:
-		if nav_target == null or not offline_card.is_ancestor_of(nav_target):
+	var card: Control = _open_card()
+	if card != null:
+		if nav_target == null or not card.is_ancestor_of(nav_target):
 			_nav_saved = nav_target
-			nav_target = _collect_btn
+			nav_target = _collect_btn if card == offline_card else set_display_btn
 		return
 	if nav_target != null and is_instance_valid(nav_target) and nav_target.is_visible_in_tree():
 		return
@@ -791,7 +938,7 @@ func _nav_select(c: Control) -> void:
 func _nav_step(d: Vector2i) -> void:
 	if not _nav_wake():
 		return
-	if nav_target == cow_btn and not offline_panel.visible:
+	if nav_target == cow_btn and _open_card() == null:
 		if d == Vector2i.UP:
 			_nav_select(tab_btns[int(tab)])
 			return
@@ -935,21 +1082,6 @@ func _on_move_pasture() -> void:
 		_set_tab(Tab.DAIRY)
 	else:
 		Sfx.play("cant", -10.0)
-
-
-func _on_sfx_toggle() -> void:
-	Farm.sfx_volume = 0.0 if Farm.sfx_volume > 0.0 else 0.8
-	Farm.save_game()
-	Sfx.play("ui")
-	_refresh_all()
-
-
-# The music player reads Farm.music_volume; this only flips and saves it.
-func _on_music_toggle() -> void:
-	Farm.music_volume = 0.0 if Farm.music_volume > 0.0 else 0.6
-	Farm.save_game()
-	Sfx.play("ui")
-	_refresh_all()
 
 
 func _on_milestone(i: int, count: int) -> void:
@@ -1133,8 +1265,6 @@ func _refresh_pasture() -> void:
 	move_btn.text = "MOVE TO A BIGGER PASTURE (+%d)" % claim
 	_set_font_size(move_btn, _fit_size(move_btn.get_theme_font("font"), move_btn.text, move_btn.size.x - 18.0, 13, 8))
 	_set_enabled(move_btn, claim > 0)
-	sfx_btn.text = "SOUND: %s" % ("ON" if Farm.sfx_volume > 0.0 else "OFF")
-	music_btn.text = "MUSIC: %s" % ("ON" if Farm.music_volume > 0.0 else "OFF")
 
 
 # =========================================================================================
@@ -1369,12 +1499,8 @@ func _run_smoke_test() -> void:
 	# Controller and arrow-key selection, driven with synthetic input events.
 	ok = _smoke_check_nav() and ok
 
-	# Settings: the music toggle flips Farm.music_volume between 0.6 and 0.0.
-	Farm.music_volume = 0.6
-	_on_music_toggle()
-	ok = _check(Farm.music_volume == 0.0, "MUSIC: OFF should set music_volume to 0") and ok
-	_on_music_toggle()
-	ok = _check(is_equal_approx(Farm.music_volume, 0.6), "MUSIC: ON should set music_volume to 0.6") and ok
+	# The settings popup and number styles.
+	ok = _smoke_check_settings() and ok
 
 	# Save and load.
 	Farm.money = 123456.0
@@ -1477,6 +1603,93 @@ func _smoke_key(key: Key) -> void:
 	up.physical_keycode = key
 	_smoke_send(up)
 	_nav_update(0.016)
+
+
+# The gear opens SETTINGS, which takes the selection and keeps it; MUSIC and SOUND step by 10%
+# and stop at OFF and 100%; NUMBERS cycles Fmt.style; DISPLAY flips Farm.fullscreen; all of it
+# survives save + load; B, Esc and DONE close it, and START opens it from anywhere.
+func _smoke_check_settings() -> bool:
+	var ok: bool = true
+	_set_tab(Tab.DAIRY)
+	_nav_pad = true
+	nav_on = true
+	_nav_select(settings_btn)
+	_smoke_press(JOY_BUTTON_A)
+	_nav_update(0.016)
+	ok = _check(settings_panel.visible and nav_target == set_display_btn, "A on the gear should open settings and select DISPLAY") and ok
+	for d: JoyButton in [JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_LEFT, JOY_BUTTON_DPAD_DOWN, JOY_BUTTON_DPAD_DOWN,
+			JOY_BUTTON_DPAD_DOWN, JOY_BUTTON_DPAD_DOWN, JOY_BUTTON_DPAD_DOWN]:
+		_smoke_dpad(d)
+		ok = _check(settings_card.is_ancestor_of(nav_target), "the selection left the settings popup") and ok
+	ok = _check(nav_target == _settings_done_btn, "d-pad down through settings should end on DONE") and ok
+	for d: JoyButton in [JOY_BUTTON_DPAD_RIGHT, JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_UP]:
+		_smoke_dpad(d)
+		ok = _check(settings_card.is_ancestor_of(nav_target), "the selection left the settings popup") and ok
+	var tab_before: Tab = tab
+	_smoke_press(JOY_BUTTON_RIGHT_SHOULDER)
+	ok = _check(tab == tab_before, "RB switched tabs behind the settings popup") and ok
+
+	Farm.music_volume = 0.6
+	_nav_activate_button(set_music_btns[1])
+	ok = _check(is_equal_approx(Farm.music_volume, 0.7) and set_music_lbl.text == "70%", "MUSIC + should go 60% -> 70%") and ok
+	for k: int in range(12):
+		_nav_activate_button(set_music_btns[0])
+	ok = _check(Farm.music_volume == 0.0 and set_music_lbl.text == "OFF", "MUSIC - should stop at OFF") and ok
+	for k: int in range(12):
+		_nav_activate_button(set_music_btns[1])
+	ok = _check(Farm.music_volume == 1.0 and set_music_lbl.text == "100%", "MUSIC + should stop at 100%") and ok
+	Farm.sfx_volume = 0.8
+	_nav_activate_button(set_sfx_btns[0])
+	ok = _check(is_equal_approx(Farm.sfx_volume, 0.7) and set_sfx_lbl.text == "70%", "SOUND - should go 80% -> 70%") and ok
+
+	Fmt.style = Fmt.Style.WORDS
+	ok = _check(Fmt.money(3.2e9) == "$3.200 BILLION" and Fmt.short(3.2e9) == "3.20B", "WORDS style") and ok
+	_nav_activate_button(set_numbers_btn)
+	ok = _check(Fmt.style == Fmt.Style.SHORT and Fmt.money(3.2e9) == "$3.20B" and set_numbers_btn.text == "$1.50B", "SHORT style (got %s)" % Fmt.money(3.2e9)) and ok
+	_nav_activate_button(set_numbers_btn)
+	ok = _check(Fmt.style == Fmt.Style.SCIENTIFIC and Fmt.money(3.2e9) == "$3.200e9" and Fmt.short(3.2e9) == "3.20e9", "SCIENTIFIC style (got %s / %s)" % [Fmt.money(3.2e9), Fmt.short(3.2e9)]) and ok
+	ok = _check(Fmt.money(12345.0) == "$12,345" and Fmt.short(950.0) == "950", "small numbers should look the same in every style") and ok
+	ok = _check(Fmt.sci(9.9996e8, 3) == "1.000e9" and Fmt.sci(1.0e9, 2) == "1.00e9" and Fmt.sci(-2.5e7, 1) == "-2.5e7", "Fmt.sci rounding (got %s, %s, %s)" % [Fmt.sci(9.9996e8, 3), Fmt.sci(1.0e9, 2), Fmt.sci(-2.5e7, 1)]) and ok
+	_nav_activate_button(set_numbers_btn)
+	ok = _check(Fmt.style == Fmt.Style.WORDS and Fmt.money(5.0e45) == "$5.000e45" and Fmt.short(5.0e45) == "5.00e45", "past duodecillion WORDS should fall back to e-notation (got %s)" % Fmt.money(5.0e45)) and ok
+
+	Farm.fullscreen = false
+	_nav_activate_button(set_display_btn)
+	ok = _check(Farm.fullscreen and set_display_btn.text == "FULLSCREEN", "DISPLAY should switch to FULLSCREEN") and ok
+	_nav_activate_button(set_display_btn)
+	ok = _check(not Farm.fullscreen and set_display_btn.text == "WINDOWED", "DISPLAY should switch back to WINDOWED") and ok
+
+	Farm.fullscreen = true
+	Fmt.style = Fmt.Style.SCIENTIFIC
+	Farm.music_volume = 0.3
+	Farm.sfx_volume = 0.9
+	Farm.save_game()
+	Farm.fullscreen = false
+	Fmt.style = Fmt.Style.WORDS
+	Farm.music_volume = 0.6
+	Farm.sfx_volume = 0.8
+	Farm.load_game()
+	ok = _check(Farm.fullscreen and Fmt.style == Fmt.Style.SCIENTIFIC and is_equal_approx(Farm.music_volume, 0.3) and is_equal_approx(Farm.sfx_volume, 0.9), "settings did not survive save + load") and ok
+	Farm.fullscreen = false
+	Fmt.style = Fmt.Style.WORDS
+	Farm.music_volume = 0.6
+	Farm.sfx_volume = 0.8
+
+	_smoke_press(JOY_BUTTON_B)
+	_nav_update(0.016)
+	ok = _check(not settings_panel.visible and nav_target == settings_btn, "B should close settings and return to the gear") and ok
+	_nav_select(tab_btns[1])
+	_smoke_press(JOY_BUTTON_START)
+	_nav_update(0.016)
+	ok = _check(settings_panel.visible and nav_target == set_display_btn, "START should open settings") and ok
+	_smoke_key(KEY_ESCAPE)
+	ok = _check(not settings_panel.visible and nav_target == tab_btns[1], "Esc should close settings and restore the selection") and ok
+	_open_settings()
+	_nav_activate_button(_settings_done_btn)
+	ok = _check(not settings_panel.visible, "DONE should close settings") and ok
+	nav_target = cow_btn
+	nav_on = false
+	return ok
 
 
 func _smoke_check_nav() -> bool:

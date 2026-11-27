@@ -22,7 +22,7 @@ const PINK_DARK: Color = Color("#e0628c")
 
 const ICONS: Array[String] = [
 	"pail", "churn", "cheese", "icecream", "yogurt", "diner", "cosmic", "moon",
-	"coin", "bell", "farmhand", "drop", "star",
+	"coin", "bell", "farmhand", "drop", "star", "gear",
 ]
 const LW: float = 2.2  # icon outline width, in the 32-unit icon box
 const WGHT_TAG: int = 0x77676874  # OpenType 'wght' axis
@@ -225,6 +225,8 @@ func draw_icon(ci: CanvasItem, id: String, center: Vector2, size: float, xf: Tra
 			_icon_drop(ci)
 		"star":
 			_icon_star(ci)
+		"gear":
+			_icon_gear(ci)
 		_:
 			push_warning("Art.draw_icon: unknown icon '%s'" % id)
 			_icon_coin(ci)
@@ -462,6 +464,21 @@ func _icon_star(ci: CanvasItem) -> void:
 	ci.draw_circle(Vector2(-3, 1), 1.4, INK, true, -1.0, true)
 	ci.draw_circle(Vector2(3, 1), 1.4, INK, true, -1.0, true)
 	ci.draw_arc(Vector2(0, 3.5), 2.6, 0.2 * PI, 0.8 * PI, 8, INK, 1.4, true)
+
+
+# The settings button: a chunky 8-tooth cog with a cream hole.
+func _icon_gear(ci: CanvasItem) -> void:
+	var pts: PackedVector2Array = PackedVector2Array()
+	var step: float = TAU / 8.0
+	for i: int in range(8):
+		var a: float = step * float(i)
+		pts.append(Vector2.from_angle(a - step * 0.3) * 10.5)
+		pts.append(Vector2.from_angle(a - step * 0.18) * 14.5)
+		pts.append(Vector2.from_angle(a + step * 0.18) * 14.5)
+		pts.append(Vector2.from_angle(a + step * 0.3) * 10.5)
+	fill(ci, round_poly(pts, 1.4, 2), Color("#c4ced8"))
+	ci.draw_arc(Vector2.ZERO, 8.0, PI * 1.05, PI * 1.45, 8, Color(1, 1, 1, 0.75), 2.0, true)
+	fill(ci, ellipse(Vector2.ZERO, 4.6, 4.6), Color("#fff3d6"))
 
 
 # A twinkly four-point star (the cow and the farm use it too).
