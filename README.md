@@ -1,9 +1,9 @@
 # Udderly Idle (working title)
 
-An idle game about milking a cow and growing a dairy empire, made in **Godot 4.7**, with bright, goofy cartoon art on a 640x360 layout that scales smoothly to any window. Everything is drawn or synthesized in code: the cow, the farm, the icons, the sound effects (a real-sounding moo and a squishy milking squeeze) and the bouncy barnyard background music. The only asset file is the font, [Fredoka](https://github.com/google/fonts/tree/main/ofl/fredoka) (SIL Open Font License, see `assets/fonts/OFL.txt`).
+An idle game about milking a cow and growing a dairy empire, made in **Godot 4.7**, with bright, goofy cartoon art on a 640x360 layout that scales smoothly to any window and stays sharp up to 4K. On a big screen the window opens at about 80% of the screen. Everything is drawn or synthesized in code: the cow, the farm, the icons, the sound effects (a real-sounding moo and a squishy milking squeeze) and the bouncy barnyard background music. The only asset file is the font, [Fredoka](https://github.com/google/fonts/tree/main/ofl/fredoka) (SIL Open Font License, see `assets/fonts/OFL.txt`).
 
 ## How it plays
-- **Milk the cow.** Click her (or press `Space`, or controller `X` from anywhere) to squeeze the udder. Every squeeze earns money.
+- **Milk the cow.** Click her (or press `Space`, or controller `X` from anywhere) to squeeze the udder. Every squeeze earns money, and her milk squirts into the pail under her. A full pail waits beside her until a little red wagon rolls up and collects it (every few seconds, or right away once two are waiting).
 - **MOO RUSH.** Milking fills the pink meter. When it's full, everything earns **x3** for 12 seconds.
 - **Dairy businesses.** Eight of them, from a Milk Pail Stand up to a Moon Cow Ranch. Click a business's icon to sell a batch; the bar fills and pays out. Buy more of each with the buttons on the right (`x1`, `x10`, `x100`, `NEXT` milestone, or `MAX`; `B` or controller `Y` cycles them). Owning 25, 50, 100, 200, 300 and 400 of a business doubles its speed; 500 and up double its profits.
 - **Farmhands.** Hire one per business and it runs by itself, even while the game is closed. You'll be greeted with what they earned when you come back.

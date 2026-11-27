@@ -1,7 +1,7 @@
 extends Node
 
 # The cartoon art kit: the palette, vector shape helpers and every icon in the game, drawn
-# with Godot's vector API (polygons, circles and thick antialiased lines). Nothing is baked
+# with Godot's vector API (polygons, circles and thick lines; MSAA smooths the edges). Nothing is baked
 # into image files or textures. Draw an icon from any draw callback with
 #   Art.draw_icon(canvas_item, "name", center, size)
 # Icon names: the business ids (pail, churn, cheese, icecream, yogurt, diner, cosmic, moon)
@@ -154,20 +154,20 @@ func outline(ci: CanvasItem, pts: PackedVector2Array, line: Color = INK, w: floa
 	var c: PackedVector2Array = pts.duplicate()
 	c.append(pts[0])
 	c.append(pts[1])
-	ci.draw_polyline(c, line, w, true)
+	ci.draw_polyline(c, line, w)
 
 
 func circle(ci: CanvasItem, c: Vector2, r: float, col: Color, line: Color = INK, w: float = LW) -> void:
-	ci.draw_circle(c, r, col, true, -1.0, w <= 0.0)
+	ci.draw_circle(c, r, col)
 	if w > 0.0:
-		ci.draw_arc(c, r, 0.0, TAU, maxi(16, int(r * 2.5)), line, w, true)
+		ci.draw_arc(c, r, 0.0, TAU, maxi(16, int(r * 2.5)), line, w)
 
 
 # A thick line with round caps.
 func stroke(ci: CanvasItem, pts: PackedVector2Array, col: Color, w: float) -> void:
-	ci.draw_polyline(pts, col, w, true)
-	ci.draw_circle(pts[0], w * 0.5, col, true, -1.0, true)
-	ci.draw_circle(pts[pts.size() - 1], w * 0.5, col, true, -1.0, true)
+	ci.draw_polyline(pts, col, w)
+	ci.draw_circle(pts[0], w * 0.5, col)
+	ci.draw_circle(pts[pts.size() - 1], w * 0.5, col)
 
 
 # A thick line with a dark outline around it (tails, straws, handles, stems).
@@ -238,14 +238,14 @@ func _shine(ci: CanvasItem, a: Vector2, b: Vector2, w: float = 2.0) -> void:
 
 
 func _icon_pail(ci: CanvasItem) -> void:
-	ci.draw_arc(Vector2(0, -3), 12.5, PI * 1.02, PI * 1.98, 20, INK, 4.6, true)
-	ci.draw_arc(Vector2(0, -3), 12.5, PI * 1.04, PI * 1.96, 20, Color("#8fa3b8"), 2.0, true)
+	ci.draw_arc(Vector2(0, -3), 12.5, PI * 1.02, PI * 1.98, 20, INK, 4.6)
+	ci.draw_arc(Vector2(0, -3), 12.5, PI * 1.04, PI * 1.96, 20, Color("#8fa3b8"), 2.0)
 	var body: PackedVector2Array = round_poly(PackedVector2Array([
 		Vector2(-12.5, -4), Vector2(12.5, -4), Vector2(9.0, 14), Vector2(-9.0, 14)]), 2.5)
 	fill(ci, body, Color("#bcd0e2"))
 	for yy: float in [3.0, 10.0]:
 		var hw: float = lerpf(12.5, 9.0, (yy + 4.0) / 18.0) - 0.8
-		ci.draw_line(Vector2(-hw, yy), Vector2(hw, yy), Color("#7f97ae"), 1.8, true)
+		ci.draw_line(Vector2(-hw, yy), Vector2(hw, yy), Color("#7f97ae"), 1.8)
 	_shine(ci, Vector2(-7.5, 0), Vector2(-6.0, 10))
 	fill(ci, ellipse(Vector2(0, -4), 13.0, 3.8), Color("#dfe9f2"))
 	ci.draw_colored_polygon(ellipse(Vector2(0, -3.6), 10.4, 2.4), WHITE)
@@ -262,7 +262,7 @@ func _icon_churn(ci: CanvasItem) -> void:
 		var band: Array[PackedVector2Array] = clip(body, rrect(Rect2(-14, yy - 1.6, 28, 3.2), 0.5, 1))
 		for p: PackedVector2Array in band:
 			ci.draw_colored_polygon(p, Color("#7a4520"))
-	ci.draw_line(Vector2(-3, -4), Vector2(-3.5, 11), Color(1, 1, 1, 0.35), 1.6, true)
+	ci.draw_line(Vector2(-3, -4), Vector2(-3.5, 11), Color(1, 1, 1, 0.35), 1.6)
 	outline(ci, body)
 	fill(ci, ellipse(Vector2(0, -7), 8.6, 2.6), Color("#eab47a"))
 	# A pat of butter in front.
@@ -276,10 +276,10 @@ func _icon_cheese(ci: CanvasItem) -> void:
 		Vector2(-15, 1), Vector2(15, -3), Vector2(15, 10), Vector2(-15, 12)]), 1.8)
 	fill(ci, front, Color("#ffc22e"))
 	for h: Vector3 in [Vector3(-8, 6, 2.4), Vector3(1, 3, 1.8), Vector3(8, 6, 2.6), Vector3(-1, 9, 1.4)]:
-		ci.draw_circle(Vector2(h.x, h.y), h.z, Color("#e39a12"), true, -1.0, true)
+		ci.draw_circle(Vector2(h.x, h.y), h.z, Color("#e39a12"))
 	fill(ci, top, Color("#ffe27a"))
-	ci.draw_circle(Vector2(5, -5), 2.0, Color("#f2c24a"), true, -1.0, true)
-	ci.draw_circle(Vector2(-4, -1), 1.4, Color("#f2c24a"), true, -1.0, true)
+	ci.draw_circle(Vector2(5, -5), 2.0, Color("#f2c24a"))
+	ci.draw_circle(Vector2(-4, -1), 1.4, Color("#f2c24a"))
 	outline(ci, front)
 
 
@@ -290,10 +290,10 @@ func _icon_icecream(ci: CanvasItem) -> void:
 		var o: float = float(k) * 4.5
 		for seg: PackedVector2Array in Geometry2D.intersect_polyline_with_polygon(
 				PackedVector2Array([Vector2(o - 10, -2), Vector2(o + 10, 18)]), cone):
-			ci.draw_polyline(seg, Color("#bf7a30"), 1.2, true)
+			ci.draw_polyline(seg, Color("#bf7a30"), 1.2)
 		for seg2: PackedVector2Array in Geometry2D.intersect_polyline_with_polygon(
 				PackedVector2Array([Vector2(o + 10, -2), Vector2(o - 10, 18)]), cone):
-			ci.draw_polyline(seg2, Color("#bf7a30"), 1.2, true)
+			ci.draw_polyline(seg2, Color("#bf7a30"), 1.2)
 	outline(ci, cone)
 	var scoop: PackedVector2Array = blob(Vector2(0, -5), 9.5, 0.6, 0.05)
 	fill(ci, scoop, PINK)
@@ -312,9 +312,9 @@ func _icon_icecream(ci: CanvasItem) -> void:
 	for i: int in range(sp.size()):
 		var d: Vector2 = Vector2(cos(sp[i].z), sin(sp[i].z)) * 1.3
 		stroke(ci, PackedVector2Array([Vector2(sp[i].x, sp[i].y) - d, Vector2(sp[i].x, sp[i].y) + d]), sprinkle_cols[i], 1.4)
-	ci.draw_line(Vector2(1.5, -15), Vector2(4, -19), INK, 1.4, true)
+	ci.draw_line(Vector2(1.5, -15), Vector2(4, -19), INK, 1.4)
 	circle(ci, Vector2(1.5, -14.5), 3.0, Color("#e8343f"), INK, 1.8)
-	ci.draw_circle(Vector2(0.6, -15.5), 0.9, Color(1, 1, 1, 0.85), true, -1.0, true)
+	ci.draw_circle(Vector2(0.6, -15.5), 0.9, Color(1, 1, 1, 0.85))
 
 
 func _icon_yogurt(ci: CanvasItem) -> void:
@@ -346,12 +346,12 @@ func _icon_shake(ci: CanvasItem) -> void:
 	# Whipped cream: outlines first, then fills, so the puffs merge into one cloud.
 	var puffs: Array[Vector3] = [Vector3(-5.5, -5, 4.8), Vector3(5.5, -5, 4.8), Vector3(0, -8.5, 5.6)]
 	for p: Vector3 in puffs:
-		ci.draw_circle(Vector2(p.x, p.y), p.z + LW * 0.5, INK, true, -1.0, true)
+		ci.draw_circle(Vector2(p.x, p.y), p.z + LW * 0.5, INK)
 	for p2: Vector3 in puffs:
-		ci.draw_circle(Vector2(p2.x, p2.y), p2.z - LW * 0.5, WHITE, true, -1.0, true)
-	ci.draw_line(Vector2(1.5, -15), Vector2(4.5, -19), INK, 1.4, true)
+		ci.draw_circle(Vector2(p2.x, p2.y), p2.z - LW * 0.5, WHITE)
+	ci.draw_line(Vector2(1.5, -15), Vector2(4.5, -19), INK, 1.4)
 	circle(ci, Vector2(1.5, -14), 3.0, Color("#e8343f"), INK, 1.8)
-	ci.draw_circle(Vector2(0.6, -15), 0.9, Color(1, 1, 1, 0.85), true, -1.0, true)
+	ci.draw_circle(Vector2(0.6, -15), 0.9, Color(1, 1, 1, 0.85))
 
 
 func _icon_rocket(ci: CanvasItem) -> void:
@@ -366,14 +366,14 @@ func _icon_rocket(ci: CanvasItem) -> void:
 	fill(ci, body, WHITE)
 	for nose: PackedVector2Array in clip(body, rrect(Rect2(-10, -20, 20, 12.5), 0.5, 1)):
 		ci.draw_colored_polygon(nose, Color("#ef4b4b"))
-	ci.draw_line(Vector2(-6.4, -7.5), Vector2(6.4, -7.5), INK, 1.6, true)
+	ci.draw_line(Vector2(-6.4, -7.5), Vector2(6.4, -7.5), INK, 1.6)
 	for spot: PackedVector2Array in clip(body, blob(Vector2(4.5, 6), 2.6, 1.0, 0.2, 16)):
 		ci.draw_colored_polygon(spot, Color("#2f2a36"))
 	for spot2: PackedVector2Array in clip(body, blob(Vector2(-5, 7.5), 1.8, 2.0, 0.2, 16)):
 		ci.draw_colored_polygon(spot2, Color("#2f2a36"))
 	outline(ci, body)
 	circle(ci, Vector2(0, -1), 3.6, Color("#7fd6ff"), INK, 1.8)
-	ci.draw_circle(Vector2(-1.2, -2.2), 1.1, Color(1, 1, 1, 0.9), true, -1.0, true)
+	ci.draw_circle(Vector2(-1.2, -2.2), 1.1, Color(1, 1, 1, 0.9))
 
 
 func _icon_moon(ci: CanvasItem) -> void:
@@ -384,9 +384,9 @@ func _icon_moon(ci: CanvasItem) -> void:
 		circle(ci, Vector2(c.x, c.y), c.z, Color("#cfc7b2"), Color("#a89f88"), 1.0)
 	# A tiny cow standing on the moon, drawn like the big one (scripts/cow.gd): a big round
 	# head on a small body, a black ear, a pink muzzle and a shiny eye.
-	ci.draw_line(Vector2(-0.5, -7), Vector2(-0.5, -3.2), INK, 2.2, true)
-	ci.draw_line(Vector2(5.5, -7), Vector2(5.8, -3.6), INK, 2.2, true)
-	ci.draw_line(Vector2(-3, -11), Vector2(-5.5, -8), INK, 1.4, true)
+	ci.draw_line(Vector2(-0.5, -7), Vector2(-0.5, -3.2), INK, 2.2)
+	ci.draw_line(Vector2(5.5, -7), Vector2(5.8, -3.6), INK, 2.2)
+	ci.draw_line(Vector2(-3, -11), Vector2(-5.5, -8), INK, 1.4)
 	var body: PackedVector2Array = rrect(Rect2(-3.5, -13, 11, 7), 3.4)
 	fill(ci, body, WHITE, INK, 1.6)
 	for sp: PackedVector2Array in clip(body, blob(Vector2(0.5, -11), 2.4, 0.5, 0.15, 14)):
@@ -400,27 +400,27 @@ func _icon_moon(ci: CanvasItem) -> void:
 	ci.draw_colored_polygon(snout, PINK)
 	var both: Array[PackedVector2Array] = Geometry2D.merge_polygons(head, snout)  # one shape: they overlap
 	outline(ci, both[0] if both.size() > 0 else head, INK, 1.6)
-	ci.draw_circle(Vector2(13.8, -12.9), 0.6, PINK_DARK, true, -1.0, true)
-	ci.draw_circle(Vector2(7.4, -13.4), 1.1, Color(1.0, 0.45, 0.58, 0.55), true, -1.0, true)
-	ci.draw_circle(Vector2(10.6, -16.4), 1.1, INK, true, -1.0, true)
-	ci.draw_circle(Vector2(10.2, -16.8), 0.4, Color.WHITE, true, -1.0, true)
+	ci.draw_circle(Vector2(13.8, -12.9), 0.6, PINK_DARK)
+	ci.draw_circle(Vector2(7.4, -13.4), 1.1, Color(1.0, 0.45, 0.58, 0.55))
+	ci.draw_circle(Vector2(10.6, -16.4), 1.1, INK)
+	ci.draw_circle(Vector2(10.2, -16.8), 0.4, Color.WHITE)
 
 
 func _icon_coin(ci: CanvasItem) -> void:
 	circle(ci, Vector2(0, 0), 13.0, GOLD)
-	ci.draw_arc(Vector2(0, 0), 9.5, 0.0, TAU, 32, GOLD_DARK, 1.6, true)
+	ci.draw_arc(Vector2(0, 0), 9.5, 0.0, TAU, 32, GOLD_DARK, 1.6)
 	var f: Font = font_bold
 	if f == null:
 		f = ThemeDB.fallback_font
 	var sz: Vector2 = f.get_string_size("$", HORIZONTAL_ALIGNMENT_LEFT, -1, 17)
 	var pos: Vector2 = Vector2(-sz.x * 0.5, f.get_ascent(17) * 0.5 - 1.5)
 	ci.draw_string(f, pos, "$", HORIZONTAL_ALIGNMENT_LEFT, -1, 17, GOLD_DARK)
-	ci.draw_arc(Vector2(0, 0), 10.8, PI * 1.1, PI * 1.45, 8, Color(1, 1, 1, 0.8), 1.8, true)
+	ci.draw_arc(Vector2(0, 0), 10.8, PI * 1.1, PI * 1.45, 8, Color(1, 1, 1, 0.8), 1.8)
 
 
 func _icon_bell(ci: CanvasItem) -> void:
-	ci.draw_arc(Vector2(0, -11), 4.0, PI, TAU, 12, INK, 4.4, true)
-	ci.draw_arc(Vector2(0, -11), 4.0, PI * 1.02, PI * 1.98, 12, GOLD_DARK, 1.8, true)
+	ci.draw_arc(Vector2(0, -11), 4.0, PI, TAU, 12, INK, 4.4)
+	ci.draw_arc(Vector2(0, -11), 4.0, PI * 1.02, PI * 1.98, 12, GOLD_DARK, 1.8)
 	var body: PackedVector2Array = round_poly(PackedVector2Array([
 		Vector2(-6.5, -11), Vector2(6.5, -11), Vector2(10.5, 8), Vector2(-10.5, 8)]), 3.0)
 	fill(ci, body, GOLD)
@@ -434,11 +434,11 @@ func _icon_farmhand(ci: CanvasItem) -> void:
 	circle(ci, Vector2(-10.5, 4), 2.8, Color("#f2b47e"))
 	circle(ci, Vector2(10.5, 4), 2.8, Color("#f2b47e"))
 	circle(ci, Vector2(0, 3.5), 10.5, Color("#f7c99a"))
-	ci.draw_circle(Vector2(-6, 7), 2.2, Color(1.0, 0.45, 0.45, 0.45), true, -1.0, true)
-	ci.draw_circle(Vector2(6, 7), 2.2, Color(1.0, 0.45, 0.45, 0.45), true, -1.0, true)
-	ci.draw_circle(Vector2(-3.8, 3), 1.5, INK, true, -1.0, true)
-	ci.draw_circle(Vector2(3.8, 3), 1.5, INK, true, -1.0, true)
-	ci.draw_arc(Vector2(0, 6), 4.0, 0.25 * PI, 0.75 * PI, 10, INK, 1.6, true)
+	ci.draw_circle(Vector2(-6, 7), 2.2, Color(1.0, 0.45, 0.45, 0.45))
+	ci.draw_circle(Vector2(6, 7), 2.2, Color(1.0, 0.45, 0.45, 0.45))
+	ci.draw_circle(Vector2(-3.8, 3), 1.5, INK)
+	ci.draw_circle(Vector2(3.8, 3), 1.5, INK)
+	ci.draw_arc(Vector2(0, 6), 4.0, 0.25 * PI, 0.75 * PI, 10, INK, 1.6)
 	inked_stroke(ci, PackedVector2Array([Vector2(3, 9), Vector2(13, 6)]), Color("#f4d35e"), 1.4, 1.0)
 	# Straw hat.
 	fill(ci, ellipse(Vector2(0, -5), 15.5, 4.2), Color("#f4d35e"))
@@ -454,16 +454,16 @@ func _icon_drop(ci: CanvasItem) -> void:
 	var d: PackedVector2Array = teardrop(Vector2(0, -15), Vector2(0, 4), 10.0, 28)
 	fill(ci, d, WHITE)
 	ci.draw_colored_polygon(ellipse(Vector2(-4, 3), 2.0, 3.6, 0.3), Color("#d4e6f5"))
-	ci.draw_circle(Vector2(-4.5, -1), 1.6, Color(1, 1, 1, 1), true, -1.0, true)
-	ci.draw_arc(Vector2(0, 4), 7.0, 0.15 * PI, 0.75 * PI, 10, Color("#a9c6e0"), 1.6, true)
+	ci.draw_circle(Vector2(-4.5, -1), 1.6, Color(1, 1, 1, 1))
+	ci.draw_arc(Vector2(0, 4), 7.0, 0.15 * PI, 0.75 * PI, 10, Color("#a9c6e0"), 1.6)
 
 
 func _icon_star(ci: CanvasItem) -> void:
 	var s: PackedVector2Array = round_poly(star(Vector2(0, 1.5), 15.0, 7.0), 1.8, 3)
 	fill(ci, s, GOLD)
-	ci.draw_circle(Vector2(-3, 1), 1.4, INK, true, -1.0, true)
-	ci.draw_circle(Vector2(3, 1), 1.4, INK, true, -1.0, true)
-	ci.draw_arc(Vector2(0, 3.5), 2.6, 0.2 * PI, 0.8 * PI, 8, INK, 1.4, true)
+	ci.draw_circle(Vector2(-3, 1), 1.4, INK)
+	ci.draw_circle(Vector2(3, 1), 1.4, INK)
+	ci.draw_arc(Vector2(0, 3.5), 2.6, 0.2 * PI, 0.8 * PI, 8, INK, 1.4)
 
 
 # The settings button: a chunky 8-tooth cog with a cream hole.
@@ -477,7 +477,7 @@ func _icon_gear(ci: CanvasItem) -> void:
 		pts.append(Vector2.from_angle(a + step * 0.18) * 14.5)
 		pts.append(Vector2.from_angle(a + step * 0.3) * 10.5)
 	fill(ci, round_poly(pts, 1.4, 2), Color("#c4ced8"))
-	ci.draw_arc(Vector2.ZERO, 8.0, PI * 1.05, PI * 1.45, 8, Color(1, 1, 1, 0.75), 2.0, true)
+	ci.draw_arc(Vector2.ZERO, 8.0, PI * 1.05, PI * 1.45, 8, Color(1, 1, 1, 0.75), 2.0)
 	fill(ci, ellipse(Vector2.ZERO, 4.6, 4.6), Color("#fff3d6"))
 
 

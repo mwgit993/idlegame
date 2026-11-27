@@ -95,9 +95,9 @@ func _draw_sky(c: Control) -> void:
 func _draw_rainbow(c: Control) -> void:
 	var cols: Array[Color] = [Color("#ff5a5a"), Color("#ffa53a"), Color("#ffe14a"), Color("#6fdc5a"), Color("#4ab8ff"), Color("#a07cff")]
 	var center: Vector2 = Vector2(118.0, 236.0)
-	c.draw_arc(center, 134.0, PI, TAU, 64, Color(1, 1, 1, 0.5), 3.0, true)
+	c.draw_arc(center, 134.0, PI, TAU, 64, Color(1, 1, 1, 0.5), 3.0)
 	for i: int in range(cols.size()):
-		c.draw_arc(center, 130.0 - float(i) * 6.0, PI, TAU, 64, cols[i], 6.4, true)
+		c.draw_arc(center, 130.0 - float(i) * 6.0, PI, TAU, 64, cols[i], 6.4)
 
 
 func _draw_sun_rays(c: Control) -> void:
@@ -113,12 +113,12 @@ func _draw_sun_rays(c: Control) -> void:
 
 func _draw_sun_face(c: Control) -> void:
 	Art.circle(c, Vector2.ZERO, 20.0, Color("#ffe45c"), Color("#ef9b0f"), 2.5)
-	c.draw_circle(Vector2(-5, -5), 8.0, Color(1, 1, 1, 0.25), true, -1.0, true)
-	c.draw_arc(Vector2(-7, -2), 3.4, PI * 1.1, PI * 1.9, 10, Art.INK, 2.0, true)
-	c.draw_arc(Vector2(7, -2), 3.4, PI * 1.1, PI * 1.9, 10, Art.INK, 2.0, true)
-	c.draw_arc(Vector2(0, 2), 8.0, 0.2 * PI, 0.8 * PI, 16, Art.INK, 2.2, true)
-	c.draw_circle(Vector2(-11, 5), 3.0, Color(1.0, 0.5, 0.4, 0.5), true, -1.0, true)
-	c.draw_circle(Vector2(11, 5), 3.0, Color(1.0, 0.5, 0.4, 0.5), true, -1.0, true)
+	c.draw_circle(Vector2(-5, -5), 8.0, Color(1, 1, 1, 0.25))
+	c.draw_arc(Vector2(-7, -2), 3.4, PI * 1.1, PI * 1.9, 10, Art.INK, 2.0)
+	c.draw_arc(Vector2(7, -2), 3.4, PI * 1.1, PI * 1.9, 10, Art.INK, 2.0)
+	c.draw_arc(Vector2(0, 2), 8.0, 0.2 * PI, 0.8 * PI, 16, Art.INK, 2.2)
+	c.draw_circle(Vector2(-11, 5), 3.0, Color(1.0, 0.5, 0.4, 0.5))
+	c.draw_circle(Vector2(11, 5), 3.0, Color(1.0, 0.5, 0.4, 0.5))
 
 
 func _draw_cloud(c: Control, i: int) -> void:
@@ -126,11 +126,11 @@ func _draw_cloud(c: Control, i: int) -> void:
 	if i % 2 == 1:
 		puffs = [Vector3(-18, 3, 11), Vector3(-2, -8, 15), Vector3(16, -2, 13), Vector3(4, 6, 12)]
 	for p: Vector3 in puffs:
-		c.draw_circle(Vector2(p.x, p.y), p.z + 1.5, Color("#8fbfdd"), true, -1.0, true)
+		c.draw_circle(Vector2(p.x, p.y), p.z + 1.5, Color("#8fbfdd"))
 	for p2: Vector3 in puffs:
-		c.draw_circle(Vector2(p2.x, p2.y), p2.z - 0.5, Color("#e2f3fd"), true, -1.0, true)
+		c.draw_circle(Vector2(p2.x, p2.y), p2.z - 0.5, Color("#e2f3fd"))
 	for p3: Vector3 in puffs:
-		c.draw_circle(Vector2(p3.x - 2.0, p3.y - 3.0), p3.z * 0.8, Color.WHITE, true, -1.0, true)
+		c.draw_circle(Vector2(p3.x - 2.0, p3.y - 3.0), p3.z * 0.8, Color.WHITE)
 
 
 func _hill(y0: float, a1: float, f1: float, p1: float, a2: float, f2: float, p2: float) -> PackedVector2Array:
@@ -147,7 +147,7 @@ func _draw_hill(c: Control, top: PackedVector2Array, col: Color, line: Color) ->
 	poly.append(Vector2(W + 10.0, H + 10.0))
 	poly.append(Vector2(-10.0, H + 10.0))
 	c.draw_colored_polygon(poly, col)
-	c.draw_polyline(top, line, 2.5, true)
+	c.draw_polyline(top, line, 2.5)
 
 
 func _draw_land(c: Control) -> void:
@@ -168,7 +168,7 @@ func _draw_land(c: Control) -> void:
 	for p: Vector2 in field:
 		cols.append(Color("#8ede5c").lerp(Color("#5aae3a"), clampf((p.y - 226.0) / 134.0, 0.0, 1.0)))
 	c.draw_polygon(field, cols)
-	c.draw_polyline(field_top, OUTLINE_NEAR, 2.5, true)
+	c.draw_polyline(field_top, OUTLINE_NEAR, 2.5)
 	# Mown stripes on the field, very faint.
 	for k: int in range(5):
 		var y: float = 252.0 + float(k) * 22.0
@@ -183,7 +183,7 @@ func _draw_land(c: Control) -> void:
 		var tuft: PackedVector2Array = PackedVector2Array([
 			g + Vector2(-4, 0) * s, g + Vector2(-2.5, -5) * s, g + Vector2(0, -1) * s,
 			g + Vector2(1.5, -7) * s, g + Vector2(2.5, -1) * s, g + Vector2(5, -4.5) * s, g + Vector2(4.5, 0) * s])
-		c.draw_polyline(tuft, OUTLINE_NEAR, 1.6, true)
+		c.draw_polyline(tuft, OUTLINE_NEAR, 1.6)
 
 
 func _draw_barn(c: Control) -> void:
@@ -199,7 +199,7 @@ func _draw_barn(c: Control) -> void:
 		Vector2(10, 162), Vector2(20, 139), Vector2(47, 126), Vector2(74, 139), Vector2(84, 162)]), 3.0)
 	Art.fill(c, roof, Art.BARN_DARK, Art.INK, 2.5)
 	c.draw_polyline(Art.round_poly(PackedVector2Array([
-		Vector2(15, 159), Vector2(23, 141), Vector2(47, 130), Vector2(71, 141), Vector2(79, 159)]), 3.0), trim, 2.0, true)
+		Vector2(15, 159), Vector2(23, 141), Vector2(47, 130), Vector2(71, 141), Vector2(79, 159)]), 3.0), trim, 2.0)
 	# Hayloft window.
 	Art.fill(c, Art.rrect(Rect2(40, 141, 14, 13), 2.0), Color("#5a2e24"), trim, 2.2)
 	c.draw_line(Vector2(47, 142), Vector2(47, 153), trim, 1.6)
@@ -207,8 +207,8 @@ func _draw_barn(c: Control) -> void:
 	var door: Rect2 = Rect2(33, 176, 28, 32)
 	c.draw_colored_polygon(Art.rrect(door, 1.5), Color("#b8322a"))
 	Art.outline(c, Art.rrect(door, 1.5), trim, 2.4)
-	c.draw_line(door.position + Vector2(2, 2), door.end - Vector2(2, 2), trim, 2.4, true)
-	c.draw_line(Vector2(door.end.x - 2, door.position.y + 2), Vector2(door.position.x + 2, door.end.y - 2), trim, 2.4, true)
+	c.draw_line(door.position + Vector2(2, 2), door.end - Vector2(2, 2), trim, 2.4)
+	c.draw_line(Vector2(door.end.x - 2, door.position.y + 2), Vector2(door.position.x + 2, door.end.y - 2), trim, 2.4)
 	c.draw_line(Vector2(door.position.x + door.size.x * 0.5, door.position.y + 1), Vector2(door.position.x + door.size.x * 0.5, door.end.y - 1), trim, 1.6)
 	Art.outline(c, Art.rrect(Rect2(31, 174, 32, 34), 2.0), Art.INK, 1.6)
 
