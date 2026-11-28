@@ -2,8 +2,8 @@ extends RefCounted
 
 # All balance numbers for Udderly Idle live here. Nothing in this file runs; Farm reads it.
 #
-# There are three animals, each with its own part of the farm (see ANIMALS at the bottom):
-# the cow (dairy), the hen (eggs) and the monkey (bananas). Each runs its own economy with the
+# There are four animals, each with its own part of the farm (see ANIMALS at the bottom):
+# the cow (dairy), the hen (eggs), the monkey (bananas) and the bee (honey). Each runs its own economy with the
 # same rules: its own money, businesses, upgrades, farmhands and golden prestige item.
 #
 # A business earns `revenue` x owned every `time` seconds. Its price for the next unit is
@@ -70,6 +70,26 @@ const MONKEY_BUSINESSES: Array[Dictionary] = [
 		"farmhand": "COSMO THE SPACE MONKEY", "farmhand_cost": 5.55e8},
 ]
 
+# The bee's honey.
+const BEE_BUSINESSES: Array[Dictionary] = [
+	{"id": "honeyjar", "name": "HONEY JAR STAND", "cost": 5.0, "growth": 1.07, "revenue": 1.5, "time": 1.0,
+		"farmhand": "BUZZY BEA", "farmhand_cost": 1000.0},
+	{"id": "candle", "name": "BEESWAX CANDLE SHOP", "cost": 75.0, "growth": 1.14, "revenue": 40.0, "time": 3.0,
+		"farmhand": "WICK WILLOW", "farmhand_cost": 15000.0},
+	{"id": "honeybun", "name": "HONEY BUN BAKERY", "cost": 900.0, "growth": 1.13, "revenue": 350.0, "time": 6.0,
+		"farmhand": "STICKY STAN", "farmhand_cost": 100000.0},
+	{"id": "tea", "name": "HONEY TEA HOUSE", "cost": 11000.0, "growth": 1.12, "revenue": 3000.0, "time": 12.0,
+		"farmhand": "LADY STEEPWELL", "farmhand_cost": 500000.0},
+	{"id": "cereal", "name": "HONEY CRUNCH CEREAL", "cost": 140000.0, "growth": 1.115, "revenue": 32000.0, "time": 25.0,
+		"farmhand": "CRISPY CRAIG", "farmhand_cost": 1.2e6},
+	{"id": "royaljelly", "name": "ROYAL JELLY PALACE", "cost": 1.8e6, "growth": 1.11, "revenue": 400000.0, "time": 60.0,
+		"farmhand": "QUEEN BEATRICE", "farmhand_cost": 1.0e7},
+	{"id": "blimp", "name": "HONEY BLIMP FLEET", "cost": 2.5e7, "growth": 1.10, "revenue": 6.0e6, "time": 180.0,
+		"farmhand": "CAPTAIN STINGER", "farmhand_cost": 1.11e8},
+	{"id": "honeymoon", "name": "HONEYMOON HIVE", "cost": 4.0e8, "growth": 1.09, "revenue": 1.1e8, "time": 600.0,
+		"farmhand": "ZIGGY THE SPACE BEE", "farmhand_cost": 5.55e8},
+]
+
 # Owning this many of one business doubles its speed (halves its cycle time) each time...
 const SPEED_MILESTONES: Array[int] = [25, 50, 100, 200, 300, 400]
 # ...and these double its profits.
@@ -115,7 +135,7 @@ const UPGRADES: Array[Dictionary] = [  # the cow's
 	{"id": "cow_spa", "name": "COW SPA", "desc": "ALL PROFITS x3", "cost": 1.0e17, "kind": "all", "value": 3.0},
 ]
 
-# The hen's and the monkey's upgrades follow the same price schedule as the cow's.
+# The hen's, the monkey's and the bee's upgrades follow the same price schedule as the cow's.
 const CHICKEN_UPGRADES: Array[Dictionary] = [
 	{"id": "c_corn", "name": "CRACKED CORN", "desc": "CLUCKS EARN x2", "cost": 50.0, "kind": "click", "value": 2.0},
 	{"id": "c_perch", "name": "COMFY PERCH", "desc": "CLUCKS EARN x2", "cost": 500.0, "kind": "click", "value": 2.0},
@@ -190,10 +210,47 @@ const MONKEY_UPGRADES: Array[Dictionary] = [
 	{"id": "m_spa", "name": "MONKEY SPA", "desc": "ALL PROFITS x3", "cost": 1.0e17, "kind": "all", "value": 3.0},
 ]
 
-# A click on the animal (a squeeze, cluck or pick) earns this before upgrades.
+const BEE_UPGRADES: Array[Dictionary] = [
+	{"id": "b_nectar", "name": "SWEET NECTAR", "desc": "BUZZES EARN x2", "cost": 50.0, "kind": "click", "value": 2.0},
+	{"id": "b_clover", "name": "CLOVER PATCH", "desc": "BUZZES EARN x2", "cost": 500.0, "kind": "click", "value": 2.0},
+	{"id": "b_labels", "name": "CUTE LABELS", "desc": "HONEY JAR STAND PROFITS x3", "cost": 2500.0, "kind": "biz", "target": 0, "value": 3.0},
+	{"id": "b_waggle", "name": "WAGGLE DANCE", "desc": "BUZZES ALSO EARN 5% OF INCOME/SEC", "cost": 5000.0, "kind": "click_share", "value": 0.05},
+	{"id": "b_wicks", "name": "LONGER WICKS", "desc": "BEESWAX CANDLE SHOP PROFITS x3", "cost": 30000.0, "kind": "biz", "target": 1, "value": 3.0},
+	{"id": "b_wings", "name": "TURBO WINGS", "desc": "BUZZES EARN x3", "cost": 250000.0, "kind": "click", "value": 3.0},
+	{"id": "b_glaze", "name": "STICKY GLAZE", "desc": "HONEY BUN BAKERY PROFITS x3", "cost": 250000.0, "kind": "biz", "target": 2, "value": 3.0},
+	{"id": "b_bigger_jars", "name": "BIGGER JARS", "desc": "HONEY JAR STAND PROFITS x3", "cost": 500000.0, "kind": "biz", "target": 0, "value": 3.0},
+	{"id": "b_lemon", "name": "SLICE OF LEMON", "desc": "HONEY TEA HOUSE PROFITS x3", "cost": 2.0e6, "kind": "biz", "target": 3, "value": 3.0},
+	{"id": "b_scented", "name": "SCENTED CANDLES", "desc": "BEESWAX CANDLE SHOP PROFITS x3", "cost": 4.0e6, "kind": "biz", "target": 1, "value": 3.0},
+	{"id": "b_marshmallows", "name": "MARSHMALLOW BITS", "desc": "HONEY CRUNCH CEREAL PROFITS x3", "cost": 2.0e7, "kind": "biz", "target": 4, "value": 3.0},
+	{"id": "b_cinnamon", "name": "CINNAMON SWIRL", "desc": "HONEY BUN BAKERY PROFITS x3", "cost": 3.0e7, "kind": "biz", "target": 2, "value": 3.0},
+	{"id": "b_pollen", "name": "POLLEN BASKETS", "desc": "BUZZES ALSO EARN 10% OF INCOME/SEC", "cost": 5.0e7, "kind": "click_share", "value": 0.10},
+	{"id": "b_happy", "name": "HAPPY BEES", "desc": "ALL PROFITS x3", "cost": 1.0e8, "kind": "all", "value": 3.0},
+	{"id": "b_thrones", "name": "VELVET THRONES", "desc": "ROYAL JELLY PALACE PROFITS x3", "cost": 2.0e8, "kind": "biz", "target": 5, "value": 3.0},
+	{"id": "b_teapots", "name": "FANCY TEAPOTS", "desc": "HONEY TEA HOUSE PROFITS x3", "cost": 2.0e8, "kind": "biz", "target": 3, "value": 3.0},
+	{"id": "b_gold_jars", "name": "GOLDEN JARS", "desc": "HONEY JAR STAND PROFITS x3", "cost": 5.0e8, "kind": "biz", "target": 0, "value": 3.0},
+	{"id": "b_helium", "name": "EXTRA HELIUM", "desc": "HONEY BLIMP FLEET PROFITS x3", "cost": 2.0e9, "kind": "biz", "target": 6, "value": 3.0},
+	{"id": "b_candelabra", "name": "CANDELABRAS", "desc": "BEESWAX CANDLE SHOP PROFITS x3", "cost": 2.0e9, "kind": "biz", "target": 1, "value": 3.0},
+	{"id": "b_prize", "name": "PRIZE IN THE BOX", "desc": "HONEY CRUNCH CEREAL PROFITS x3", "cost": 2.0e9, "kind": "biz", "target": 4, "value": 3.0},
+	{"id": "b_drizzle", "name": "DOUBLE DRIZZLE", "desc": "HONEY BUN BAKERY PROFITS x3", "cost": 1.0e10, "kind": "biz", "target": 2, "value": 3.0},
+	{"id": "b_spoons", "name": "GOLDEN SPOONS", "desc": "ROYAL JELLY PALACE PROFITS x3", "cost": 2.0e10, "kind": "biz", "target": 5, "value": 3.0},
+	{"id": "b_space_suits", "name": "TINY SPACE SUITS", "desc": "HONEYMOON HIVE PROFITS x3", "cost": 2.0e10, "kind": "biz", "target": 7, "value": 3.0},
+	{"id": "b_gold_wings", "name": "GOLDEN WINGS", "desc": "BUZZES EARN x5", "cost": 5.0e10, "kind": "click", "value": 5.0},
+	{"id": "b_scones", "name": "SCONES ON THE SIDE", "desc": "HONEY TEA HOUSE PROFITS x3", "cost": 5.0e10, "kind": "biz", "target": 3, "value": 3.0},
+	{"id": "b_meadow", "name": "WILDFLOWER MEADOW", "desc": "ALL PROFITS x3", "cost": 1.0e11, "kind": "all", "value": 3.0},
+	{"id": "b_propellers", "name": "BIG PROPELLERS", "desc": "HONEY BLIMP FLEET PROFITS x3", "cost": 2.0e11, "kind": "biz", "target": 6, "value": 3.0},
+	{"id": "b_mascot", "name": "CEREAL MASCOT", "desc": "HONEY CRUNCH CEREAL PROFITS x3", "cost": 2.0e11, "kind": "biz", "target": 4, "value": 3.0},
+	{"id": "b_royal_ball", "name": "ROYAL BALL", "desc": "ROYAL JELLY PALACE PROFITS x3", "cost": 1.0e12, "kind": "biz", "target": 5, "value": 3.0},
+	{"id": "b_moon_flowers", "name": "MOON FLOWERS", "desc": "HONEYMOON HIVE PROFITS x3", "cost": 2.0e12, "kind": "biz", "target": 7, "value": 3.0},
+	{"id": "b_sky_parade", "name": "SKY PARADE", "desc": "HONEY BLIMP FLEET PROFITS x3", "cost": 1.0e13, "kind": "biz", "target": 6, "value": 3.0},
+	{"id": "b_queen", "name": "QUEEN'S BLESSING", "desc": "ALL PROFITS x3", "cost": 1.0e14, "kind": "all", "value": 3.0},
+	{"id": "b_galaxy", "name": "HONEY GALAXY", "desc": "HONEYMOON HIVE PROFITS x3", "cost": 1.0e14, "kind": "biz", "target": 7, "value": 3.0},
+	{"id": "b_spa", "name": "BEE SPA", "desc": "ALL PROFITS x3", "cost": 1.0e17, "kind": "all", "value": 3.0},
+]
+
+# A click on the animal (a squeeze, cluck, pick or buzz) earns this before upgrades.
 const BASE_CLICK: float = 1.0
 
-# MOO RUSH (CLUCK RUSH, BANANA RUSH): every click fills the meter a bit; when it's full, that animal's
+# MOO RUSH (CLUCK RUSH, BANANA RUSH, BUZZ RUSH): every click fills the meter a bit; when it's full, that animal's
 # businesses earn x3 for a while.
 const RUSH_PER_CLICK: float = 0.04
 const RUSH_DECAY_PER_SEC: float = 0.12
@@ -204,7 +261,7 @@ const RUSH_MULT: float = 3.0
 # Total bells for everything you've ever earned = BELL_SCALE x sqrt(earned / BELL_UNIT).
 const BELL_SCALE: float = 10.0
 const BELL_UNIT: float = 1.0e9
-const BELL_BONUS: float = 0.02 # +2% profit per bell (golden eggs and bananas work the same way)
+const BELL_BONUS: float = 0.02 # +2% profit per bell (golden eggs, bananas and honeypots work the same way)
 
 # The animals, in unlock order. Each has its own part of the farm and its own economy. An animal
 # opens once the animal at index "needs" holds "needs_gold" of its golden item; it stays open.
@@ -231,4 +288,11 @@ const ANIMALS: Array[Dictionary] = [
 		"move_desc": "MOVING TO A BIGGER GROVE SELLS YOUR WHOLE GROVE",
 		"tabs": ["BANANAS", "UPGRADES", "FARMHANDS", "GROVE"], "click_icon": "banana", "face": "monkeyface",
 		"businesses": MONKEY_BUSINESSES, "upgrades": MONKEY_UPGRADES, "gold_scale": BELL_SCALE, "gold_unit": BELL_UNIT},
+	{"id": "bee", "name": "BEE", "place": "THE BEE MEADOW", "needs": 2, "needs_gold": 3,
+		"click": "BUZZ", "clicks": "BUZZES", "verb": "MAKE HONEY", "hint": "CLICK THE BEE TO MAKE HONEY!",
+		"rush": "BUZZ RUSH", "gold": "GOLDEN HONEYPOTS", "gold_one": "GOLDEN HONEYPOT", "gold_icon": "goldhoney",
+		"move": "BUILD A BIGGER HIVE", "moved": "HIVES BUILT", "fresh": "A BUZZING NEW HIVE!",
+		"move_desc": "BUILDING A BIGGER HIVE SELLS YOUR WHOLE HIVE",
+		"tabs": ["HONEY", "UPGRADES", "FARMHANDS", "HIVE"], "click_icon": "honeydrop", "face": "beeface",
+		"businesses": BEE_BUSINESSES, "upgrades": BEE_UPGRADES, "gold_scale": BELL_SCALE, "gold_unit": BELL_UNIT},
 ]

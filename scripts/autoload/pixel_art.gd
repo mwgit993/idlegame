@@ -24,8 +24,9 @@ const ICONS: Array[String] = [
 	"pail", "churn", "cheese", "icecream", "yogurt", "diner", "cosmic", "moon",
 	"eggbasket", "friedegg", "omelette", "custard", "cake", "eggnog", "hatchery", "fancyegg",
 	"bunch", "smoothie", "bread", "split", "chips", "pie", "boat", "planet",
-	"coin", "bell", "goldegg", "goldbanana", "egg", "banana", "farmhand", "drop", "star", "gear",
-	"cowface", "henface", "monkeyface", "lock",
+	"honeyjar", "candle", "honeybun", "tea", "cereal", "royaljelly", "blimp", "honeymoon",
+	"coin", "bell", "goldegg", "goldbanana", "goldhoney", "egg", "banana", "honeydrop", "farmhand", "drop", "star", "gear",
+	"cowface", "henface", "monkeyface", "beeface", "lock",
 ]
 const LW: float = 2.2  # icon outline width, in the 32-unit icon box
 const WGHT_TAG: int = 0x77676874  # OpenType 'wght' axis
@@ -250,6 +251,28 @@ func draw_icon(ci: CanvasItem, id: String, center: Vector2, size: float, xf: Tra
 			_icon_boat(ci)
 		"planet":
 			_icon_planet(ci)
+		"honeyjar":
+			_icon_honeyjar(ci)
+		"candle":
+			_icon_candle(ci)
+		"honeybun":
+			_icon_honeybun(ci)
+		"tea":
+			_icon_tea(ci)
+		"cereal":
+			_icon_cereal(ci)
+		"royaljelly":
+			_icon_royaljelly(ci)
+		"blimp":
+			_icon_blimp(ci)
+		"honeymoon":
+			_icon_honeymoon(ci)
+		"goldhoney":
+			_icon_goldhoney(ci)
+		"honeydrop":
+			_icon_honeydrop(ci)
+		"beeface":
+			_icon_beeface(ci)
 		"goldegg":
 			_icon_goldegg(ci)
 		"goldbanana":
@@ -736,6 +759,155 @@ func _icon_planet(ci: CanvasItem) -> void:
 	ci.draw_arc(Vector2(0, 0), 11.0, PI * 1.05, PI * 1.95, 16, INK, LW)
 	ci.draw_colored_polygon(ellipse(Vector2(-4, -5), 2.6, 1.6, -0.5, 10), Color(1, 1, 1, 0.8))
 	sparkle(ci, Vector2(12, -11), 3.5, WHITE)
+
+
+# --- The bee's businesses ---
+
+const HONEY_COL: Color = Color("#ffb21e")
+const HONEY_DARK: Color = Color("#e5870f")
+const BEE_YELLOW: Color = Color("#ffd23a")
+const BEE_STRIPE: Color = Color("#4a3328")
+
+
+# A honey pot: a round jar with a rim, honey dripping over it.
+func _honeypot(ci: CanvasItem, c: Vector2, s: float, col: Color, drip: bool = true) -> void:
+	var body: PackedVector2Array = round_poly(PackedVector2Array([
+		c + Vector2(-9, -7) * s, c + Vector2(9, -7) * s, c + Vector2(13, 0) * s, c + Vector2(11, 11) * s,
+		c + Vector2(-11, 11) * s, c + Vector2(-13, 0) * s]), 4.0 * s)
+	fill(ci, body, col)
+	fill(ci, rrect(Rect2(c.x - 11.0 * s, c.y - 11.0 * s, 22.0 * s, 5.0 * s), 2.0 * s), col.darkened(0.15))
+	if drip:
+		fill(ci, round_poly(PackedVector2Array([c + Vector2(2, -7) * s, c + Vector2(7, -7) * s, c + Vector2(6, 1) * s, c + Vector2(3, 1) * s]), 1.5 * s, 2), HONEY_COL, INK, 1.6)
+		circle(ci, c + Vector2(4.5, 2) * s, 2.4 * s, HONEY_COL, INK, 1.6)
+	ci.draw_arc(c + Vector2(0, 2) * s, 7.0 * s, PI * 1.1, PI * 1.4, 8, Color(1, 1, 1, 0.7), 1.8)
+
+
+func _icon_honeyjar(ci: CanvasItem) -> void:
+	var jar: PackedVector2Array = round_poly(PackedVector2Array([Vector2(-9, -8), Vector2(9, -8), Vector2(12, -3), Vector2(12, 14), Vector2(-12, 14), Vector2(-12, -3)]), 3.0)
+	ci.draw_colored_polygon(jar, HONEY_COL)
+	ci.draw_colored_polygon(PackedVector2Array([Vector2(-12, -1), Vector2(12, -1), Vector2(12, 1), Vector2(-12, 1)]), Color("#ffd776"))
+	outline(ci, jar)
+	fill(ci, rrect(Rect2(-11, -14, 22, 7), 2.5), Color("#e8483a"))
+	for x: float in [-6.0, 0.0, 6.0]:
+		ci.draw_circle(Vector2(x, -10.5), 1.3, WHITE)
+	var hexa: PackedVector2Array = PackedVector2Array()
+	for i: int in range(6):
+		hexa.append(Vector2(0, 6) + Vector2.from_angle(TAU * float(i) / 6.0) * 6.0)
+	fill(ci, hexa, Color("#fff6dc"), INK, 1.6)
+	_shine(ci, Vector2(-8, 0), Vector2(-8, 9), 1.8)
+
+
+func _icon_candle(ci: CanvasItem) -> void:
+	fill(ci, ellipse(Vector2(0, 12), 13.0, 4.0), Color("#c4ced8"))
+	var wax: PackedVector2Array = rrect(Rect2(-7, -6, 14, 18), 2.5)
+	fill(ci, wax, Color("#ffd776"))
+	for k: int in range(3):
+		var y: float = -2.0 + 5.0 * float(k)
+		for x: float in [-3.5, 3.5]:
+			ci.draw_arc(Vector2(x + (1.75 if k % 2 == 1 else 0.0), y), 2.2, 0.0, TAU, 6, HONEY_DARK, 1.2)
+	ci.draw_line(Vector2(0, -6), Vector2(0, -9), INK, 1.6)
+	fill(ci, teardrop(Vector2(0, -19), Vector2(0, -11.5), 3.6), Color("#ffb21e"), INK, 1.6)
+	ci.draw_colored_polygon(teardrop(Vector2(0, -15.5), Vector2(0, -11.5), 1.8), Color("#fff4c0"))
+	_shine(ci, Vector2(-4, -3), Vector2(-4, 8), 1.6)
+
+
+func _icon_honeybun(ci: CanvasItem) -> void:
+	fill(ci, ellipse(Vector2(0, 9), 15.0, 5.0), Color("#e6f1f8"))
+	fill(ci, blob(Vector2(0, 0), 12.5, 1.0, 0.08, 28), Color("#d99a55"))
+	var sw: PackedVector2Array = PackedVector2Array()
+	for i: int in range(30):
+		var t: float = float(i) / 29.0
+		sw.append(Vector2.from_angle(t * TAU * 1.6) * (1.5 + 8.0 * t) + Vector2(0, -1))
+	ci.draw_polyline(sw, Color("#a8683a"), 2.0)
+	fill(ci, round_poly(PackedVector2Array([Vector2(-10, -5), Vector2(-2, -10), Vector2(8, -8), Vector2(10, -2), Vector2(4, 0), Vector2(-4, -2)]), 2.5), Color(1.0, 0.75, 0.2, 0.85), INK, 1.6)
+	circle(ci, Vector2(5, 2), 1.8, HONEY_COL, INK, 1.2)
+
+
+func _icon_tea(ci: CanvasItem) -> void:
+	for x: float in [-4.0, 3.0]:
+		ci.draw_polyline(PackedVector2Array([Vector2(x, -8), Vector2(x - 2.0, -12), Vector2(x + 1.0, -16), Vector2(x - 1.0, -19)]), Color(1, 1, 1, 0.85), 1.8)
+	fill(ci, ellipse(Vector2(0, 11), 15.0, 4.0), Color("#e6f1f8"))
+	ci.draw_arc(Vector2(11, 1), 4.5, -PI * 0.5, PI * 0.5, 12, INK, 4.4)
+	ci.draw_arc(Vector2(11, 1), 4.5, -PI * 0.45, PI * 0.45, 12, Color("#ff9cc0"), 2.0)
+	var cup: PackedVector2Array = round_poly(PackedVector2Array([Vector2(-12, -6), Vector2(12, -6), Vector2(8, 10), Vector2(-8, 10)]), 2.5)
+	fill(ci, cup, Color("#ff9cc0"))
+	fill(ci, ellipse(Vector2(0, -6), 12.0, 3.0), Color("#c9741e"), INK, 1.6)
+	ci.draw_circle(Vector2(-4, 3), 1.6, WHITE)
+	ci.draw_circle(Vector2(4, 3), 1.6, WHITE)
+	fill(ci, teardrop(Vector2(9, -16), Vector2(9, -11), 3.0), HONEY_COL, INK, 1.4)
+
+
+func _icon_cereal(ci: CanvasItem) -> void:
+	inked_stroke(ci, PackedVector2Array([Vector2(6, -2), Vector2(14, -14)]), Color("#c4ced8"), 3.0, 1.6)
+	for o: Vector2 in [Vector2(-8, -2), Vector2(-2, -4), Vector2(4, -2), Vector2(-5, 1), Vector2(1, 0)]:
+		circle(ci, o, 3.2, HONEY_COL, INK, 1.4)
+		ci.draw_circle(o, 1.0, Color("#a8683a"))
+	var bowl: PackedVector2Array = PackedVector2Array()
+	for i: int in range(17):
+		var a: float = PI * float(i) / 16.0
+		bowl.append(Vector2(cos(a) * 14.0, 1.0 + sin(a) * 12.0))
+	fill(ci, bowl, Color("#3fb0ec"))
+	ci.draw_line(Vector2(-12, 5), Vector2(12, 5), Color("#9ad8f8"), 2.0)
+	fill(ci, rrect(Rect2(-5, 12, 10, 3), 1.0), Color("#3fb0ec"))
+
+
+func _icon_royaljelly(ci: CanvasItem) -> void:
+	_honeypot(ci, Vector2(0, 4), 0.9, Color("#ffb3cf"), false)
+	var crown: PackedVector2Array = round_poly(PackedVector2Array([Vector2(-9, -6), Vector2(-10, -15), Vector2(-5, -10), Vector2(0, -17), Vector2(5, -10), Vector2(10, -15), Vector2(9, -6)]), 1.2, 2)
+	fill(ci, crown, GOLD)
+	ci.draw_circle(Vector2(0, -9), 1.6, Color("#ff3d6e"))
+	sparkle(ci, Vector2(12, -2), 3.5, WHITE)
+
+
+func _icon_blimp(ci: CanvasItem) -> void:
+	inked_stroke(ci, PackedVector2Array([Vector2(-4, 4), Vector2(-3, 9)]), INK, 1.4, 0.0)
+	inked_stroke(ci, PackedVector2Array([Vector2(4, 4), Vector2(3, 9)]), INK, 1.4, 0.0)
+	fill(ci, rrect(Rect2(-6, 8, 12, 5), 1.5), Color("#c98a4b"))
+	fill(ci, PackedVector2Array([Vector2(-12, -3), Vector2(-17, -10), Vector2(-17, 4)]), BEE_STRIPE, INK, 1.6)
+	var bag: PackedVector2Array = ellipse(Vector2(1, -3), 14.0, 8.0)
+	ci.draw_colored_polygon(bag, BEE_YELLOW)
+	for p: PackedVector2Array in clip(bag, PackedVector2Array([Vector2(-5, -12), Vector2(-1, -12), Vector2(-1, 6), Vector2(-5, 6)])):
+		ci.draw_colored_polygon(p, BEE_STRIPE)
+	for p2: PackedVector2Array in clip(bag, PackedVector2Array([Vector2(4, -12), Vector2(8, -12), Vector2(8, 6), Vector2(4, 6)])):
+		ci.draw_colored_polygon(p2, BEE_STRIPE)
+	outline(ci, bag)
+	ci.draw_colored_polygon(ellipse(Vector2(-4, -7), 4.0, 1.6, -0.2, 10), Color(1, 1, 1, 0.6))
+
+
+func _icon_honeymoon(ci: CanvasItem) -> void:
+	# A crescent moon made of honey, dripping.
+	for c: PackedVector2Array in Geometry2D.clip_polygons(ellipse(Vector2(-1, 0), 13.0, 13.0), ellipse(Vector2(7, -4), 11.0, 11.0)):
+		fill(ci, c, HONEY_COL)
+	for d: Vector3 in [Vector3(-6, 12, 3.5), Vector3(2, 12, 2.6)]:
+		fill(ci, teardrop(Vector2(d.x, d.y - d.z * 1.6), Vector2(d.x, d.y + d.z * 0.6), d.z), HONEY_COL, INK, 1.4)
+	ci.draw_circle(Vector2(-7, -3), 1.6, HONEY_DARK)
+	ci.draw_circle(Vector2(-3, 5), 1.2, HONEY_DARK)
+	sparkle(ci, Vector2(11, 7), 3.5, WHITE)
+	sparkle(ci, Vector2(12, -12), 2.5, WHITE)
+
+
+# --- The bee's golden item, click icon and face ---
+
+func _icon_goldhoney(ci: CanvasItem) -> void:
+	_honeypot(ci, Vector2(0, 2), 1.0, GOLD)
+	sparkle(ci, Vector2(11, -11), 4.0, WHITE)
+
+
+func _icon_honeydrop(ci: CanvasItem) -> void:
+	fill(ci, teardrop(Vector2(0, -15), Vector2(0, 4), 10.0, 28), HONEY_COL)
+	ci.draw_arc(Vector2(0, 4), 7.0, 0.15 * PI, 0.75 * PI, 10, HONEY_DARK, 1.8)
+	ci.draw_circle(Vector2(-4.5, -1), 1.8, Color(1, 1, 1, 0.9))
+
+
+func _icon_beeface(ci: CanvasItem) -> void:
+	for side: float in [-1.0, 1.0]:
+		ci.draw_polyline(PackedVector2Array([Vector2(4.0 * side, -9), Vector2(7.0 * side, -13), Vector2(9.0 * side, -15)]), INK, 1.8)
+		circle(ci, Vector2(9.5 * side, -15.0), 2.6, BEE_STRIPE, INK, 1.4)
+	fill(ci, ellipse(Vector2(0, 0), 12.0, 11.0), BEE_YELLOW)
+	for side2: float in [-1.0, 1.0]:
+		ci.draw_circle(Vector2(4.5 * side2, -1.5), 2.0, INK)
+		ci.draw_colored_polygon(ellipse(Vector2(7.5 * side2, 3.5), 2.4, 1.5), Color(1.0, 0.45, 0.58, 0.55))
+	ci.draw_arc(Vector2(0, 2.5), 3.0, PI * 0.2, PI * 0.8, 8, INK, 1.4)
 
 
 # --- Golden items, click icons, animal faces ---
