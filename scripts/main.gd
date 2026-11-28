@@ -2,7 +2,7 @@ extends Node2D
 
 # Udderly Idle: the whole screen is built here in code (a 640x360 layout, scaled smoothly to
 # the window). Left: the farm and the animal (click the cow to squeeze the udder), with buttons
-# to switch between the cow, the hen and the monkey (each has its own economy in Farm; the tab
+# to switch between the cow, the hen, the monkey and the bee (each has its own economy in Farm; the tab
 # names and texts below change with the animal). Right: four tabs:
 #   DAIRY      your businesses: click an icon to sell, buy more, watch the bars fill
 #   UPGRADES   one-time profit multipliers
@@ -10,7 +10,8 @@ extends Node2D
 #   PASTURE    golden cowbells (prestige), stats and settings
 # All state lives in the Farm autoload; this script draws it and forwards input. The art is
 # cartoon vector drawing: the cow is scripts/cow.gd, the hen scripts/chicken.gd, the monkey
-# scripts/monkey.gd (both built on scripts/critter.gd), the background scripts/farm_scene.gd,
+# scripts/monkey.gd, the bee scripts/bee.gd (all three built on scripts/critter.gd), the
+# background scripts/farm_scene.gd,
 # icons and shape helpers are in the Art autoload.
 
 const Data = preload("res://scripts/game_data.gd")
@@ -18,6 +19,7 @@ const Fmt = preload("res://scripts/num_fmt.gd")
 const Cow = preload("res://scripts/cow.gd")
 const Chicken = preload("res://scripts/chicken.gd")
 const Monkey = preload("res://scripts/monkey.gd")
+const Bee = preload("res://scripts/bee.gd")
 const Pails = preload("res://scripts/milk_pails.gd")
 const FarmScene = preload("res://scripts/farm_scene.gd")
 
@@ -49,7 +51,7 @@ const COL_TAN: Color = Color("#c9a77a")
 
 enum Tab { DAIRY, UPGRADES, FARMHANDS, PASTURE }
 const BUY_MODES: Array[String] = ["x1", "x10", "x100", "NEXT", "MAX"]
-const THEMES: Array[String] = ["cow", "chicken", "monkey"]  # FarmScene theme per animal
+const THEMES: Array[String] = ["cow", "chicken", "monkey", "bee"]  # FarmScene theme per animal
 
 var ui: CanvasLayer
 var tab: Tab = Tab.DAIRY
@@ -58,7 +60,7 @@ var buy_mode: int = 0
 # Left panel
 var farm_scene: Control
 var cow: Control          # the cow (scripts/cow.gd)
-var critters: Array[Control] = []  # cow, hen, monkey; only the one on screen is shown
+var critters: Array[Control] = []  # cow, hen, monkey, bee; only the one on screen is shown
 var critter: Control      # the animal on screen
 var cow_btn: Button       # the invisible button over the animal (any animal, despite the name)
 var animal_btns: Array[Button] = []
@@ -379,7 +381,7 @@ func _build_ui() -> void:
 
 func _build_cow_panel() -> void:
 	cow = Cow.new()
-	critters = [cow, Chicken.new(), Monkey.new()]
+	critters = [cow, Chicken.new(), Monkey.new(), Bee.new()]
 	for c: Control in critters:
 		c.size = Vector2(W, H)
 		ui.add_child(c)
@@ -799,7 +801,7 @@ func _on_squeeze() -> void:
 	var v: float = Farm.squeeze()
 	critter.squeeze()
 	var id: String = String(Farm.info()["id"])
-	Sfx.play({"cow": "squirt", "chicken": "pop", "monkey": "pluck"}.get(id, "squirt"), -8.0, 0.12)
+	Sfx.play({"cow": "squirt", "chicken": "pop", "monkey": "pluck", "bee": "glop"}.get(id, "squirt"), -8.0, 0.12)
 	_clicks_since_moo += 1
 	# The animal calls out now and then (roughly every 15 clicks), never twice in a row too quickly.
 	if _clicks_since_moo >= 10 and randf() < 0.2:
@@ -1239,10 +1241,10 @@ func _on_rush_started() -> void:
 	_animal_voice(-2.0)
 
 
-# The animal on screen moos, clucks or ooks.
+# The animal on screen moos, clucks, ooks or buzzes.
 func _animal_voice(vol: float) -> void:
 	var id: String = String(Farm.info()["id"])
-	Sfx.play({"cow": "moo", "chicken": "cluck", "monkey": "ook"}.get(id, "moo"), vol, 0.08)
+	Sfx.play({"cow": "moo", "chicken": "cluck", "monkey": "ook", "bee": "buzz"}.get(id, "moo"), vol, 0.08)
 
 
 func _on_animal_btn(a: int) -> void:
@@ -1628,7 +1630,7 @@ func _run_smoke_test() -> void:
 		for key: String in ["gold_icon", "click_icon", "face"]:
 			ok = _check(Art.has_icon(String(an[key])), "no %s icon for %s" % [key, String(an["id"])]) and ok
 	# Only the cow is open on a new farm; the hen's button says what opens it.
-	ok = _check(Farm.animal == 0 and not Farm.is_open(1) and not Farm.is_open(2) and not Farm.set_animal(1), "a new farm should have only the cow") and ok
+	ok = _check(Farm.animal == 0 and not Farm.is_open(1) and not Farm.is_open(2) and not Farm.is_open(3) and not Farm.set_animal(1), "a new farm should have only the cow") and ok
 	_on_animal_btn(1)
 	ok = _check(Farm.animal == 0 and critter == cow and toast_lbl.text.contains("20 GOLDEN COWBELLS"), "a locked animal's button should say what opens it") and ok
 
@@ -1740,7 +1742,7 @@ func _run_smoke_test() -> void:
 	ok = _check(is_equal_approx(Farm.bell_mult(), 3.0), "100 bells should give x3") and ok
 	ok = _check(Farm.claimable_bells() == 0, "bells were claimable twice") and ok
 
-	# The hen and the monkey: unlocking, switching, separate economies, saving.
+	# The hen, the monkey and the bee: unlocking, switching, separate economies, saving.
 	ok = _smoke_check_animals() and ok
 
 	# Music: one 8-bar pass renders, isn't silent, and fits the loop length.
@@ -1753,7 +1755,7 @@ func _run_smoke_test() -> void:
 	var sq: Array = Sfx._variants.get("squirt", [])
 	var moo: Array = Sfx._variants.get("moo", [])
 	ok = _check(sq.size() >= 3 and moo.size() >= 3, "missing squeeze or moo takes") and ok
-	for nm: String in ["cluck", "ook", "pop", "pluck"]:
+	for nm: String in ["cluck", "ook", "pop", "pluck", "buzz", "glop"]:
 		ok = _check(Sfx._streams.has(nm), "missing sound " + nm) and ok
 
 	# Milk goes into pails, never on the grass, and the wagon collects the full ones.
@@ -1783,7 +1785,7 @@ func _run_smoke_test() -> void:
 
 
 # The hen opens at 20 golden cowbells (the test just moved pasture for 100), the monkey at 3
-# golden eggs. Each animal keeps its own money, businesses and upgrades, farmhands keep earning
+# golden eggs, the bee at 3 golden bananas. Each animal keeps its own money, businesses and upgrades, farmhands keep earning
 # for the animals not on screen, and everything survives a save, including old one-animal saves.
 func _smoke_check_animals() -> bool:
 	var ok: bool = true
@@ -1835,6 +1837,27 @@ func _smoke_check_animals() -> bool:
 		_set_tab(t2)
 		_refresh_all()
 	_set_tab(Tab.DAIRY)
+	# Golden bananas open the bee.
+	ok = _check(not Farm.is_open(3), "the bee meadow should be locked before golden bananas") and ok
+	Farm.total_earned = 9.0e7
+	_on_move_pasture()
+	ok = _check(Farm.bells == 3 and Farm.is_open(3) and Farm.pens[1].get("gold") == 3, "3 golden bananas should open the bee meadow") and ok
+	_on_animal_btn(3)
+	ok = _check(Farm.animal == 3 and critter == critters[3] and critters[3].visible and not critters[2].visible, "switching to the bee failed") and ok
+	ok = _check(tab_btns[0].text == "HONEY" and String(Farm.biz(0)["id"]) == "honeyjar" and hint_lbl.text.contains("BEE"), "the bee's businesses and hint should show") and ok
+	for k4: int in range(8):
+		_on_squeeze()
+	ok = _check(is_equal_approx(Farm.money, 8.0) and critters[3].call("particle_count") > 0, "buzzes should earn the bee money and fling honey") and ok
+	for f3: int in range(40):
+		critters[3].call("_process", 0.03)
+	ok = _check(int(critters[3].get("shipped")) >= 1 and int(critters[3].get("stored")) < 6, "honey should land in the jar and it should empty when full") and ok
+	Farm.money = 1.0e9
+	ok = _check(Farm.buy(1, 5) and Farm.hire(1) and Farm.buy_upgrade("b_happy") and not Farm.buy_upgrade("m_happy"), "bee purchases failed") and ok
+	for t3: int in range(4):
+		_set_tab(t3)
+		_refresh_all()
+	ok = _check(pasture_title.text == "GOLDEN HONEYPOTS" and move_btn.text.begins_with("BUILD A BIGGER HIVE"), "the bee's prestige page should talk about golden honeypots") and ok
+	_set_tab(Tab.DAIRY)
 	# Save and load keeps every animal and which one was on screen.
 	Farm.money = 4321.0
 	Farm.save_game()
@@ -1843,14 +1866,15 @@ func _smoke_check_animals() -> bool:
 	Farm.reset_save()
 	ok = _check(Farm.animal == 0 and not Farm.is_open(1), "reset_save should close the hen house") and ok
 	ok = _check(_reload_from(saved), "could not reload the saved farm") and ok
-	ok = _check(Farm.animal == 2 and Farm.is_open(1) and Farm.is_open(2) and is_equal_approx(Farm.money, 4321.0), "save/load lost the monkey") and ok
+	ok = _check(Farm.animal == 3 and Farm.is_open(1) and Farm.is_open(2) and Farm.is_open(3) and is_equal_approx(Farm.money, 4321.0), "save/load lost the bee") and ok
 	ok = _check(Farm.pens[1].get("owned") == hen_owned and Farm.pens[1].get("gold") == 3 and Farm.pens[0].get("gold") == 100, "save/load lost the hen or the cow") and ok
+	ok = _check(Farm.pens[2].get("gold") == 3 and Farm.pens[3].get("upgrades").has("b_happy"), "save/load lost the monkey's golden bananas or the bee's upgrades") and ok
 	# An old save from before the hen (the cow's fields at the top level) still loads.
 	var v1: Dictionary = {"version": 1, "money": 777.0, "total_earned": 5.0e9, "owned": [12, 3], "farmhands": [true],
 		"upgrades": ["warm_hands"], "bells": 25, "total_clicks": 40, "pastures_moved": 2}
 	ok = _check(_reload_from(v1), "could not load a version 1 save") and ok
 	ok = _check(Farm.animal == 0 and Farm.money >= 777.0 and Farm.owned[0] == 12 and Farm.bells == 25 and Farm.pastures_moved == 2
-		and Farm.upgrades.has("warm_hands") and Farm.is_open(1) and not Farm.is_open(2), "a version 1 save did not load into the cow") and ok
+		and Farm.upgrades.has("warm_hands") and Farm.is_open(1) and not Farm.is_open(2) and not Farm.is_open(3), "a version 1 save did not load into the cow") and ok
 	_apply_animal()
 	ok = _check(critter == cow and cow.visible and tab_btns[0].text == "DAIRY", "back on the cow, the dairy should show") and ok
 	return ok

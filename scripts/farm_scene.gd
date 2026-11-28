@@ -5,8 +5,9 @@ extends Control
 # itself once (Godot keeps the draw commands), so nothing static is redrawn per frame. Per
 # frame we only move or rotate a few Controls: clouds drift, the sun's rays turn, flowers
 # sway, and a rainbow fades in during MOO RUSH.
-# Each animal has its own part of the farm: set_land("cow" / "chicken" / "monkey") swaps the
-# landmark (barn and silo, the hen house, palm trees and a hut), the far hills and the fence.
+# Each animal has its own part of the farm: set_land("cow" / "chicken" / "monkey" / "bee") swaps
+# the landmark (barn and silo, the hen house, palm trees and a hut, beehive boxes and sunflowers),
+# the far hills and the fence.
 
 const W: float = 640.0
 const H: float = 360.0
@@ -167,8 +168,17 @@ func _draw_hill(c: Control, top: PackedVector2Array, col: Color, line: Color) ->
 
 
 func _draw_far_hill(c: Control) -> void:
-	var col: Color = Color("#7fcf6a") if land == "monkey" else Color("#b4e89a")
+	var col: Color = {"monkey": Color("#7fcf6a"), "bee": Color("#c4ea8a")}.get(land, Color("#b4e89a"))
 	_draw_hill(c, _hill(186.0, 12.0, 0.017, 0.4, 7.0, 0.043, 2.0), col, OUTLINE_FAR)
+	if land == "bee":
+		# A wildflower meadow on the far hill.
+		var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+		rng.seed = 5
+		var cols: Array[Color] = [Color("#ffffff"), Color("#ffe066"), Color("#ff9cc0"), Color("#b39dff")]
+		for i: int in range(40):
+			var x: float = rng.randf_range(0.0, PANEL_W + 10.0)
+			var y: float = 196.0 + rng.randf_range(0.0, 14.0) + sin(x * 0.017 + 0.4) * 6.0
+			c.draw_circle(Vector2(x, y), rng.randf_range(1.2, 2.0), cols[i % cols.size()])
 
 
 func _draw_landmarks(c: Control) -> void:
@@ -180,6 +190,11 @@ func _draw_landmarks(c: Control) -> void:
 			_draw_hut(c)
 			_draw_palm(c, Vector2(110, 210), 0.18, 1.0)
 			_draw_palm(c, Vector2(14, 212), -0.12, 0.85)
+		"bee":
+			_draw_bee_boxes(c)
+			_draw_sunflower(c, Vector2(198, 214), 62.0, 1.0)
+			_draw_sunflower(c, Vector2(176, 214), 44.0, 0.8)
+			_draw_sunflower(c, Vector2(218, 214), 50.0, 0.85)
 		_:
 			_draw_silo(c)
 			_draw_barn(c)
@@ -337,6 +352,47 @@ func _draw_hut(c: Control) -> void:
 	for k2: int in range(6):
 		var x2: float = 26.0 + float(k2) * 10.0
 		c.draw_line(Vector2(x2, 171), Vector2(lerpf(x2, 52.0, 0.35), 158), Color("#c9a040"), 1.4)
+
+
+# Beehive boxes on stands: a tall stack of three and a short one, in pastel colours.
+func _draw_bee_boxes(c: Control) -> void:
+	var cols: Array[Color] = [Color("#fffdf6"), Color("#ffe58a"), Color("#bfe8c8"), Color("#ffc9dc"), Color("#fffdf6")]
+	var stacks: Array[Vector3] = [Vector3(10, 3, 0), Vector3(46, 2, 3)]   # x, boxes, colour offset
+	for st: Vector3 in stacks:
+		var x: float = st.x
+		for lx: float in [x + 3.0, x + 27.0]:
+			Art.fill(c, Art.rrect(Rect2(lx - 2.0, 200, 4, 9), 1.0), Color("#a8683a"), Art.INK, 1.8)
+		var y: float = 200.0
+		for k: int in range(int(st.y)):
+			y -= 15.0
+			var box: PackedVector2Array = Art.rrect(Rect2(x, y, 30, 15), 1.5)
+			Art.fill(c, box, cols[(k + int(st.z)) % cols.size()], Art.INK, 2.2)
+			c.draw_line(Vector2(x + 4, y + 4), Vector2(x + 26, y + 4), Color(0, 0, 0, 0.1), 1.2)
+		# Entrance slot at the bottom, and the roof.
+		Art.fill(c, Art.rrect(Rect2(x + 9, 196, 12, 3), 1.0), Color("#4a2620"), Art.INK, 1.2)
+		var roof: PackedVector2Array = Art.round_poly(PackedVector2Array([
+			Vector2(x - 4, y), Vector2(x + 2, y - 7), Vector2(x + 28, y - 7), Vector2(x + 34, y)]), 1.5, 2)
+		Art.fill(c, roof, Art.BARN, Art.INK, 2.2)
+	# A couple of tiny bees in the air (the scene draws once, so they hold still).
+	for p: Vector2 in [Vector2(42, 136), Vector2(158, 132)]:
+		Art.fill(c, Art.ellipse(p + Vector2(-1, -3.5), 3.0, 2.0, -0.4, 10), Color(0.86, 0.95, 1.0, 0.85), Art.INK, 1.1)
+		Art.fill(c, Art.ellipse(p, 4.2, 3.2, 0.0, 12), Color("#ffd23a"), Art.INK, 1.3)
+		c.draw_line(p + Vector2(-0.5, -2.8), p + Vector2(-0.5, 2.8), Color("#4a3328"), 1.4)
+
+
+# A tall sunflower: a stem with two leaves and a big yellow head with a brown middle.
+func _draw_sunflower(c: Control, base: Vector2, h: float, s: float) -> void:
+	var head: Vector2 = base + Vector2(3.0 * s, -h)
+	Art.inked_stroke(c, PackedVector2Array([base, base + Vector2(-2.0, -h * 0.5), head]), Color("#4fae3a"), 3.0 * s, 1.6)
+	for lf: Vector3 in [Vector3(-7.0, -0.35, -0.6), Vector3(7.0, -0.55, 0.6)]:
+		var lc: Vector2 = base + Vector2(lf.x * s, h * lf.y)
+		Art.fill(c, Art.ellipse(lc, 7.0 * s, 3.2 * s, lf.z, 14), Color("#5fbf3f"), Art.INK, 1.6)
+	for k: int in range(12):
+		var a: float = TAU * float(k) / 12.0
+		Art.fill(c, Art.ellipse(head + Vector2.from_angle(a) * 9.0 * s, 4.6 * s, 2.6 * s, a, 12), Color("#ffcc2e"), Art.INK, 1.4)
+	Art.circle(c, head, 6.5 * s, Color("#7a4a26"), Art.INK, 1.8)
+	for d: Vector2 in [Vector2(-2, -2), Vector2(2, -1), Vector2(-1, 2), Vector2(2.5, 2.5)]:
+		c.draw_circle(head + d * s, 0.9 * s, Color("#4a2a14"))
 
 
 func _draw_fence(c: Control) -> void:

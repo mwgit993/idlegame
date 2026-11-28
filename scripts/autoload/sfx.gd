@@ -2,7 +2,8 @@ extends Node
 
 # Sound effects, synthesized at startup into AudioStreamWAVs (no audio files).
 # Sfx.play("squirt"). Names: squirt, coin, buy, cant, milestone, moo, hire, rush, bell, ui,
-# and for the hen and the monkey: cluck, pop (an egg is laid), ook, pluck (a banana is picked).
+# and for the other animals: cluck, pop (an egg is laid), ook, pluck (a banana is picked),
+# buzz, glop (a drop of honey).
 # "squirt" (the milking squeeze) and "moo" have several takes; play() picks one at random
 # so repeated clicks don't sound like a loop.
 
@@ -46,6 +47,13 @@ func _ready() -> void:
 	_streams["ook"] = _variants["ook"][0]
 	_streams["pop"] = _blip(900.0, 420.0, 0.07, 0.0)
 	_streams["pluck"] = _blip(760.0, 300.0, 0.09, 0.25)
+	_variants["buzz"] = [
+		_buzz([Vector3(0.32, 210.0, 270.0)], 3),
+		_buzz([Vector3(0.26, 250.0, 205.0)], 7),
+		_buzz([Vector3(0.12, 230.0, 250.0), Vector3(0.05, 0.0, 0.0), Vector3(0.16, 240.0, 290.0)], 11),
+	]
+	_streams["buzz"] = _variants["buzz"][0]
+	_streams["glop"] = _blip(560.0, 190.0, 0.13, 0.04)
 
 
 func play(name: String, vol_db: float = -6.0, jitter: float = 0.05) -> void:
@@ -267,7 +275,33 @@ func _voice(syl: Array[Vector4], gap: float, formant_scale: float, seed: int) ->
 	return _to_stream(_normalize(out, 0.8))
 
 
-# A quick falling blip (an egg popping out, a banana coming off the bunch). noise adds a
+# A friendly bumblebee buzz: a soft sawtooth with a wingbeat flutter and a little vibrato,
+# rounded off by a low-pass. Each part is (length, start Hz, end Hz); 0 Hz is a gap.
+func _buzz(parts: Array[Vector3], seed_n: int) -> AudioStreamWAV:
+	var out: PackedFloat32Array = PackedFloat32Array()
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = seed_n
+	var phase: float = 0.0
+	var lp: float = 0.0
+	var rate: float = float(MIX_RATE)
+	for part: Vector3 in parts:
+		var n: int = int(part.x * rate)
+		for i: int in range(n):
+			if part.y <= 0.0:
+				out.append(0.0)
+				continue
+			var k: float = float(i) / float(n)
+			var t: float = float(i) / rate
+			var f: float = lerpf(part.y, part.z, k) * (1.0 + 0.025 * sin(TAU * 7.0 * t))
+			phase = fmod(phase + f / rate, 1.0)
+			var saw: float = phase * 2.0 - 1.0 + rng.randf_range(-0.08, 0.08)
+			var flutter: float = 0.72 + 0.28 * sin(TAU * 46.0 * t)
+			lp += (saw * flutter - lp) * 0.22
+			out.append(lp * smoothstep(0.0, 0.1, k) * (1.0 - smoothstep(0.65, 1.0, k)))
+	return _to_stream(_normalize(out, 0.55))
+
+
+# A quick falling blip (an egg popping out, a banana coming off the bunch, a honey drop). noise adds a
 # rustle at the start.
 func _blip(f0: float, f1: float, length: float, noise: float) -> AudioStreamWAV:
 	var out: PackedFloat32Array = PackedFloat32Array()
