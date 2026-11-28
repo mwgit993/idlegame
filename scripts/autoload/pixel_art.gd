@@ -22,7 +22,10 @@ const PINK_DARK: Color = Color("#e0628c")
 
 const ICONS: Array[String] = [
 	"pail", "churn", "cheese", "icecream", "yogurt", "diner", "cosmic", "moon",
-	"coin", "bell", "farmhand", "drop", "star", "gear",
+	"eggbasket", "friedegg", "omelette", "custard", "cake", "eggnog", "hatchery", "fancyegg",
+	"bunch", "smoothie", "bread", "split", "chips", "pie", "boat", "planet",
+	"coin", "bell", "goldegg", "goldbanana", "egg", "banana", "farmhand", "drop", "star", "gear",
+	"cowface", "henface", "monkeyface", "lock",
 ]
 const LW: float = 2.2  # icon outline width, in the 32-unit icon box
 const WGHT_TAG: int = 0x77676874  # OpenType 'wght' axis
@@ -215,6 +218,54 @@ func draw_icon(ci: CanvasItem, id: String, center: Vector2, size: float, xf: Tra
 			_icon_rocket(ci)
 		"moon":
 			_icon_moon(ci)
+		"eggbasket":
+			_icon_eggbasket(ci)
+		"friedegg":
+			_icon_friedegg(ci)
+		"omelette":
+			_icon_omelette(ci)
+		"custard":
+			_icon_custard(ci)
+		"cake":
+			_icon_cake(ci)
+		"eggnog":
+			_icon_eggnog(ci)
+		"hatchery":
+			_icon_hatchery(ci)
+		"fancyegg":
+			_icon_fancyegg(ci)
+		"bunch":
+			_icon_bunch(ci)
+		"smoothie":
+			_icon_smoothie(ci)
+		"bread":
+			_icon_bread(ci)
+		"split":
+			_icon_split(ci)
+		"chips":
+			_icon_chips(ci)
+		"pie":
+			_icon_pie(ci)
+		"boat":
+			_icon_boat(ci)
+		"planet":
+			_icon_planet(ci)
+		"goldegg":
+			_icon_goldegg(ci)
+		"goldbanana":
+			_icon_goldbanana(ci)
+		"egg":
+			_icon_egg(ci)
+		"banana":
+			_icon_banana(ci)
+		"cowface":
+			_icon_cowface(ci)
+		"henface":
+			_icon_henface(ci)
+		"monkeyface":
+			_icon_monkeyface(ci)
+		"lock":
+			_icon_lock(ci)
 		"coin":
 			_icon_coin(ci)
 		"bell":
@@ -482,5 +533,271 @@ func _icon_gear(ci: CanvasItem) -> void:
 
 
 # A twinkly four-point star (the cow and the farm use it too).
+
+# --- The hen's businesses ---
+
+const EGG_COL: Color = Color("#fff3df")
+const YOLK: Color = Color("#ffc21e")
+const BANANA_COL: Color = Color("#ffd94a")
+const BANANA_DARK: Color = Color("#e0a91c")
+
+
+func _egg(ci: CanvasItem, c: Vector2, rx: float, ry: float, col: Color = EGG_COL, rot: float = 0.0, w: float = LW) -> void:
+	fill(ci, ellipse(c, rx, ry, rot, 24), col, INK, w)
+	ci.draw_colored_polygon(ellipse(c + Vector2(-rx * 0.35, -ry * 0.4), rx * 0.26, ry * 0.28, rot - 0.4, 10), Color(1, 1, 1, 0.85))
+
+
+func _banana(ci: CanvasItem, c: Vector2, size: float, rot: float, col: Color = BANANA_COL) -> void:
+	var outer: PackedVector2Array = PackedVector2Array()
+	var inner: PackedVector2Array = PackedVector2Array()
+	for i: int in range(13):
+		var a: float = lerpf(-1.05, 1.05, float(i) / 12.0)
+		outer.append(Vector2(sin(a) * size, -cos(a) * size + size * 0.8))
+		inner.append(Vector2(sin(a) * size * 0.78, -cos(a) * size * 0.6 + size * 0.8))
+	var shape: PackedVector2Array = outer.duplicate()
+	for i2: int in range(inner.size() - 1, -1, -1):
+		shape.append(inner[i2])
+	var xf: Transform2D = Transform2D(rot, c)
+	fill(ci, xf * round_poly(shape, 1.2, 2), col, INK, 2.0)
+	ci.draw_circle(xf * outer[0], size * 0.14, Color("#7a5a2a"))
+	ci.draw_circle(xf * outer[outer.size() - 1], size * 0.12, Color("#7a5a2a"))
+	ci.draw_line(xf * Vector2(-size * 0.35, -size * 0.02), xf * Vector2(size * 0.25, -size * 0.05), Color(1, 1, 1, 0.6), 1.4)
+
+
+func _icon_eggbasket(ci: CanvasItem) -> void:
+	ci.draw_arc(Vector2(0, 0), 12.0, PI * 1.05, PI * 1.95, 18, INK, 4.6)
+	ci.draw_arc(Vector2(0, 0), 12.0, PI * 1.07, PI * 1.93, 18, Color("#c98a4b"), 2.0)
+	_egg(ci, Vector2(-6, -1), 5.0, 6.5)
+	_egg(ci, Vector2(6, -1), 5.0, 6.5)
+	_egg(ci, Vector2(0, -4), 5.0, 6.5)
+	var body: PackedVector2Array = round_poly(PackedVector2Array([Vector2(-14, 1), Vector2(14, 1), Vector2(10, 14), Vector2(-10, 14)]), 2.5)
+	fill(ci, body, Color("#d99a55"))
+	for yy: float in [5.0, 9.5]:
+		ci.draw_line(Vector2(-12.0 + (yy - 1.0) * 0.25, yy), Vector2(12.0 - (yy - 1.0) * 0.25, yy), Color("#a8683a"), 1.6)
+	for xx: float in [-5.0, 0.0, 5.0]:
+		ci.draw_line(Vector2(xx, 2.5), Vector2(xx * 0.8, 13.0), Color("#a8683a"), 1.4)
+
+
+func _icon_friedegg(ci: CanvasItem) -> void:
+	inked_stroke(ci, PackedVector2Array([Vector2(9, 9), Vector2(15, 15)]), Color("#5a4a44"), 3.4, 1.8)
+	circle(ci, Vector2(-1, -1), 13.5, Color("#5f6b78"))
+	ci.draw_circle(Vector2(-1, -1), 10.5, Color("#47525e"))
+	fill(ci, blob(Vector2(-1, -1), 9.5, 2.0, 0.16, 24), WHITE, INK, 2.0)
+	circle(ci, Vector2(0, -2), 4.4, YOLK, INK, 1.8)
+	ci.draw_circle(Vector2(-1.4, -3.4), 1.3, Color(1, 1, 1, 0.85))
+
+
+func _icon_omelette(ci: CanvasItem) -> void:
+	var plate: PackedVector2Array = ellipse(Vector2(0, 6), 15.0, 6.0)
+	fill(ci, plate, Color("#e6f1f8"))
+	var om: PackedVector2Array = PackedVector2Array()
+	for i: int in range(17):
+		var a: float = PI + PI * float(i) / 16.0
+		om.append(Vector2(cos(a) * 12.0, 4.0 + sin(a) * 11.0))
+	fill(ci, om, Color("#ffd447"))
+	ci.draw_arc(Vector2(0, 4), 8.5, PI * 1.15, PI * 1.85, 12, Color("#f0b52a"), 1.6)
+	for h: Vector2 in [Vector2(-4, -1), Vector2(3, -3), Vector2(5, 1)]:
+		ci.draw_circle(h, 1.3, Color("#58a83a"))
+	ci.draw_circle(Vector2(-1, 1), 1.4, Color("#e8483a"))
+
+
+func _icon_custard(ci: CanvasItem) -> void:
+	fill(ci, ellipse(Vector2(0, 10), 15.0, 4.5), Color("#e6f1f8"))
+	var body: PackedVector2Array = round_poly(PackedVector2Array([Vector2(-11, 9), Vector2(-8, -6), Vector2(8, -6), Vector2(11, 9)]), 2.0)
+	fill(ci, body, Color("#ffe08a"))
+	var top: PackedVector2Array = ellipse(Vector2(0, -6), 8.0, 3.0)
+	fill(ci, top, Color("#c9741e"))
+	ci.draw_line(Vector2(-6, -4), Vector2(-8, 6), Color("#c9741e"), 2.2)
+	ci.draw_line(Vector2(4, -4), Vector2(5, 3), Color("#c9741e"), 2.0)
+	_shine(ci, Vector2(-5, 0), Vector2(-6, 6), 1.8)
+
+
+func _icon_cake(ci: CanvasItem) -> void:
+	var slice: PackedVector2Array = round_poly(PackedVector2Array([Vector2(-14, 12), Vector2(-14, -2), Vector2(13, -9), Vector2(13, 6)]), 1.8)
+	fill(ci, slice, Color("#ffe6b8"))
+	ci.draw_line(Vector2(-14, 4), Vector2(13, -2), Color("#ff8fb6"), 3.0)
+	var top: PackedVector2Array = round_poly(PackedVector2Array([Vector2(-14, -2), Vector2(4, -14), Vector2(13, -9)]), 1.6)
+	fill(ci, top, Color("#ffb3cf"))
+	outline(ci, slice)
+	circle(ci, Vector2(3, -14), 3.0, Color("#ff3d4e"), INK, 1.8)
+	ci.draw_line(Vector2(3, -17), Vector2(5, -20), Color("#3f8f2c"), 1.6)
+
+
+func _icon_eggnog(ci: CanvasItem) -> void:
+	ci.draw_arc(Vector2(10, 2), 5.5, -PI * 0.5, PI * 0.5, 12, INK, 4.4)
+	ci.draw_arc(Vector2(10, 2), 5.5, -PI * 0.45, PI * 0.45, 12, Color("#e8f0f6"), 2.0)
+	var mug: PackedVector2Array = rrect(Rect2(-11, -6, 21, 20), 3.0)
+	fill(ci, mug, Color("#e8483a"))
+	ci.draw_line(Vector2(-9, 3), Vector2(8, 3), Color(1, 1, 1, 0.9), 2.4)
+	for k: int in range(3):
+		ci.draw_circle(Vector2(-5.0 + 5.0 * float(k), 3.0), 1.2, Color("#3f8f2c"))
+	fill(ci, blob(Vector2(-0.5, -7), 10.0, 1.0, 0.18, 20), Color("#fff8e0"), INK, 2.0)
+	ci.draw_circle(Vector2(1, -9), 1.2, Color("#a86a2a"))
+	ci.draw_circle(Vector2(-4, -8), 1.0, Color("#a86a2a"))
+
+
+func _icon_hatchery(ci: CanvasItem) -> void:
+	_egg(ci, Vector2(0, 5), 11.0, 10.0)
+	var chick: PackedVector2Array = ellipse(Vector2(0, -4), 9.0, 8.5)
+	fill(ci, chick, Color("#ffe14a"))
+	ci.draw_circle(Vector2(-3, -6), 1.5, INK)
+	ci.draw_circle(Vector2(3, -6), 1.5, INK)
+	fill(ci, PackedVector2Array([Vector2(-2, -3), Vector2(2, -3), Vector2(0, 0)]), Color("#ff9f1c"), INK, 1.4)
+	var shell: PackedVector2Array = PackedVector2Array([Vector2(-11, 3), Vector2(-7, -1), Vector2(-3, 3), Vector2(1, -1), Vector2(5, 3), Vector2(9, -1), Vector2(11, 3),
+		Vector2(11, 6), Vector2(0, 15), Vector2(-11, 6)])
+	fill(ci, shell, EGG_COL)
+	ci.draw_colored_polygon(ellipse(Vector2(-6, 7), 2.0, 2.8, 0.0, 10), Color(1, 1, 1, 0.8))
+
+
+func _icon_fancyegg(ci: CanvasItem) -> void:
+	fill(ci, rrect(Rect2(-9, 10, 18, 5), 1.5), GOLD)
+	_egg(ci, Vector2(0, -2), 10.5, 13.0, Color("#6fb8ff"))
+	ci.draw_line(Vector2(-10, -4), Vector2(10, -4), GOLD, 2.6)
+	ci.draw_line(Vector2(-9, 3), Vector2(9, 3), GOLD, 2.6)
+	for g: Vector3 in [Vector3(-5, 0, 0.0), Vector3(0, 0, 1.0), Vector3(5, 0, 2.0)]:
+		ci.draw_circle(Vector2(g.x, g.y - 0.5), 1.8, [Color("#ff3d6e"), Color("#5fe08a"), Color("#ffffff")][int(g.z)])
+	sparkle(ci, Vector2(10, -12), 4.0, WHITE)
+
+
+# --- The monkey's businesses ---
+
+func _icon_bunch(ci: CanvasItem) -> void:
+	fill(ci, rrect(Rect2(-3, -15, 6, 7), 1.8), Color("#7a5a2a"))
+	for k: int in range(4):
+		var a: float = -0.75 + 0.5 * float(k)
+		_banana(ci, Vector2(0, -8) + Vector2.from_angle(a + PI * 0.5) * 8.0, 10.0, a)
+
+
+func _icon_smoothie(ci: CanvasItem) -> void:
+	inked_stroke(ci, PackedVector2Array([Vector2(3, -8), Vector2(7, -16)]), Color("#ff6fae"), 2.4, 1.6)
+	var cup: PackedVector2Array = round_poly(PackedVector2Array([Vector2(-10, -8), Vector2(10, -8), Vector2(7, 14), Vector2(-7, 14)]), 2.0)
+	fill(ci, cup, Color("#ffe58a"))
+	ci.draw_line(Vector2(-9, -2), Vector2(9, -2), Color("#fff6c2"), 2.0)
+	fill(ci, ellipse(Vector2(0, -8), 11.0, 3.2), Color("#fff1b0"))
+	_banana(ci, Vector2(-8, -10), 6.0, -0.6)
+	_shine(ci, Vector2(-5, 1), Vector2(-4, 10), 1.8)
+
+
+func _icon_bread(ci: CanvasItem) -> void:
+	var loaf: PackedVector2Array = round_poly(PackedVector2Array([Vector2(-14, 10), Vector2(-14, -1), Vector2(-9, -9), Vector2(9, -9), Vector2(14, -1), Vector2(14, 10)]), 4.0)
+	fill(ci, loaf, Color("#b8733a"))
+	fill(ci, round_poly(PackedVector2Array([Vector2(-11, -2), Vector2(-7, -7), Vector2(7, -7), Vector2(11, -2), Vector2(11, 1), Vector2(-11, 1)]), 2.5), Color("#8f5426"), INK, 0.0)
+	_banana(ci, Vector2(0, -6), 7.0, 0.0)
+	for x: float in [-7.0, 0.0, 7.0]:
+		ci.draw_line(Vector2(x - 1.5, 4), Vector2(x + 1.5, 8), Color("#8f5426"), 1.6)
+
+
+func _icon_split(ci: CanvasItem) -> void:
+	var boat: PackedVector2Array = round_poly(PackedVector2Array([Vector2(-15, 2), Vector2(15, 2), Vector2(10, 12), Vector2(-10, 12)]), 3.0)
+	_banana(ci, Vector2(-7, -2), 7.0, -1.3)
+	_banana(ci, Vector2(7, -2), 7.0, 1.3)
+	for sc: Vector3 in [Vector3(-6, -3, 0.0), Vector3(0, -6, 1.0), Vector3(6, -3, 2.0)]:
+		circle(ci, Vector2(sc.x, sc.y), 5.0, [Color("#fff4dc"), Color("#ff9cc0"), Color("#8a5232")][int(sc.z)], INK, 1.8)
+	circle(ci, Vector2(0, -12), 2.4, Color("#ff3d4e"), INK, 1.6)
+	fill(ci, boat, Color("#e6f1f8"))
+
+
+func _icon_chips(ci: CanvasItem) -> void:
+	var bag: PackedVector2Array = round_poly(PackedVector2Array([Vector2(-11, -13), Vector2(11, -13), Vector2(12, 13), Vector2(-12, 13)]), 2.5)
+	fill(ci, bag, Color("#3fb0ec"))
+	ci.draw_line(Vector2(-11, -9), Vector2(11, -9), Color("#2a86c0"), 2.0)
+	for c: Vector2 in [Vector2(-4, 2), Vector2(4, 4), Vector2(0, -3)]:
+		circle(ci, c, 4.5, Color("#ffe58a"), INK, 1.6)
+		ci.draw_circle(c, 1.4, Color("#e0a91c"))
+
+
+func _icon_pie(ci: CanvasItem) -> void:
+	var tin: PackedVector2Array = round_poly(PackedVector2Array([Vector2(-15, 2), Vector2(15, 2), Vector2(11, 11), Vector2(-11, 11)]), 2.0)
+	fill(ci, tin, Color("#d9a35e"))
+	for x: float in [-8.0, -2.5, 3.0, 8.5]:
+		ci.draw_line(Vector2(x, 3.5), Vector2(x - 0.8, 10), Color("#b07a3a"), 1.4)
+	fill(ci, blob(Vector2(0, -2), 13.0, 0.5, 0.12, 24), Color("#fff8e6"), INK, 2.0)
+	ci.draw_colored_polygon(PackedVector2Array([Vector2(-15, 2), Vector2(15, 2), Vector2(15, 4), Vector2(-15, 4)]), Color("#fff8e6"))
+	outline(ci, tin)
+	for b: Vector2 in [Vector2(-5, -6), Vector2(4, -7), Vector2(0, -2)]:
+		circle(ci, b, 2.6, BANANA_COL, INK, 1.4)
+
+
+func _icon_boat(ci: CanvasItem) -> void:
+	inked_stroke(ci, PackedVector2Array([Vector2(0, 4), Vector2(0, -15)]), Color("#8a5a32"), 2.2, 1.6)
+	fill(ci, PackedVector2Array([Vector2(1, -14), Vector2(12, 0), Vector2(1, 0)]), WHITE, INK, 2.0)
+	_banana(ci, Vector2(0, 0), 15.0, 0.0, BANANA_COL)
+	ci.draw_arc(Vector2(-8, 14), 3.0, PI, TAU, 8, Color("#3fb0ec"), 2.0)
+	ci.draw_arc(Vector2(6, 14), 3.0, PI, TAU, 8, Color("#3fb0ec"), 2.0)
+
+
+func _icon_planet(ci: CanvasItem) -> void:
+	circle(ci, Vector2(0, 0), 11.0, BANANA_COL)
+	ci.draw_arc(Vector2(-3, 2), 6.0, PI * 0.2, PI * 0.9, 10, BANANA_DARK, 2.0)
+	ci.draw_circle(Vector2(4, -4), 2.0, BANANA_DARK)
+	var ring: PackedVector2Array = ellipse(Vector2(0, 1), 16.0, 4.5, -0.25, 32)
+	ci.draw_polyline(ring + PackedVector2Array([ring[0]]), INK, 4.2)
+	ci.draw_polyline(ring + PackedVector2Array([ring[0]]), Color("#a07cff"), 2.0)
+	ci.draw_arc(Vector2(0, 0), 11.0, PI * 1.05, PI * 1.95, 16, INK, LW)
+	ci.draw_colored_polygon(ellipse(Vector2(-4, -5), 2.6, 1.6, -0.5, 10), Color(1, 1, 1, 0.8))
+	sparkle(ci, Vector2(12, -11), 3.5, WHITE)
+
+
+# --- Golden items, click icons, animal faces ---
+
+func _icon_goldegg(ci: CanvasItem) -> void:
+	_egg(ci, Vector2(0, 1), 10.0, 13.0, GOLD)
+	ci.draw_arc(Vector2(0, 1), 7.0, PI * 0.15, PI * 0.6, 10, GOLD_DARK, 1.8)
+	sparkle(ci, Vector2(10, -11), 4.0, WHITE)
+
+
+func _icon_goldbanana(ci: CanvasItem) -> void:
+	_banana(ci, Vector2(0, -2), 14.0, -0.35, GOLD)
+	sparkle(ci, Vector2(11, -11), 4.0, WHITE)
+
+
+func _icon_egg(ci: CanvasItem) -> void:
+	_egg(ci, Vector2(0, 1), 10.0, 13.0)
+
+
+func _icon_banana(ci: CanvasItem) -> void:
+	_banana(ci, Vector2(0, -2), 14.0, -0.35)
+
+
+func _icon_cowface(ci: CanvasItem) -> void:
+	for side: float in [-1.0, 1.0]:
+		fill(ci, ellipse(Vector2(13.0 * side, -6), 6.0, 3.6, side * 0.35), WHITE)
+	fill(ci, ellipse(Vector2(0, -2), 12.0, 11.0), WHITE)
+	ci.draw_colored_polygon(ellipse(Vector2(-7, -8), 3.6, 3.0, 0.4, 12), Color("#3b3440"))
+	fill(ci, ellipse(Vector2(0, 6), 9.0, 5.5), Color("#ffb3c8"))
+	for side2: float in [-1.0, 1.0]:
+		ci.draw_circle(Vector2(4.5 * side2, -3), 1.9, INK)
+		ci.draw_circle(Vector2(3.0 * side2, 6), 1.1, Color("#e77897"))
+
+
+func _icon_henface(ci: CanvasItem) -> void:
+	for cb: Vector3 in [Vector3(-5, -12, 3.5), Vector3(0, -14, 4.2), Vector3(5, -12, 3.5)]:
+		circle(ci, Vector2(cb.x, cb.y), cb.z, Color("#ff5247"), INK, 1.8)
+	fill(ci, ellipse(Vector2(0, -1), 11.5, 11.0), WHITE)
+	for side: float in [-1.0, 1.0]:
+		ci.draw_circle(Vector2(4.5 * side, -3), 1.9, INK)
+	fill(ci, PackedVector2Array([Vector2(-3.5, 1), Vector2(3.5, 1), Vector2(0, 6)]), Color("#ffb52e"), INK, 1.6)
+	circle(ci, Vector2(0, 8.5), 2.0, Color("#ff5247"), INK, 1.4)
+
+
+func _icon_monkeyface(ci: CanvasItem) -> void:
+	for side: float in [-1.0, 1.0]:
+		circle(ci, Vector2(12.0 * side, -1), 4.8, Color("#a8693d"), INK, 1.8)
+		ci.draw_circle(Vector2(12.0 * side, -1), 2.6, Color("#f2a99e"))
+	fill(ci, ellipse(Vector2(0, -1), 11.0, 11.0), Color("#a8693d"))
+	fill(ci, ellipse(Vector2(0, 3), 7.5, 6.0), Color("#f8d9ab"), INK, 1.6)
+	for side2: float in [-1.0, 1.0]:
+		ci.draw_circle(Vector2(4.0 * side2, -4), 1.9, INK)
+	ci.draw_arc(Vector2(0, 3), 3.0, PI * 0.2, PI * 0.8, 8, INK, 1.4)
+
+
+func _icon_lock(ci: CanvasItem) -> void:
+	ci.draw_arc(Vector2(0, -4), 6.5, PI, TAU, 14, INK, 5.4)
+	ci.draw_arc(Vector2(0, -4), 6.5, PI * 1.03, PI * 1.97, 14, Color("#c7cfd8"), 2.4)
+	fill(ci, rrect(Rect2(-9, -4, 18, 15), 3.0), GOLD)
+	ci.draw_circle(Vector2(0, 2.5), 2.4, INK)
+	ci.draw_line(Vector2(0, 3), Vector2(0, 7), INK, 2.0)
+
+
 func sparkle(ci: CanvasItem, c: Vector2, r: float, col: Color) -> void:
 	ci.draw_colored_polygon(round_poly(star(c, r, r * 0.32, 4, 0.0), r * 0.15, 2), col)
