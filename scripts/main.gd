@@ -110,6 +110,7 @@ var set_music_btns: Array[Button] = []  # [-, +]
 var set_sfx_btns: Array[Button] = []    # [-, +]
 var set_numbers_btn: Button
 var _settings_done_btn: Button
+var set_quit_btn: Button
 var set_delete_btn: Button
 var confirm_panel: Control           # "ARE YOU SURE?" before deleting the save
 var confirm_card: Panel
@@ -583,8 +584,8 @@ func _build_settings_popup() -> void:
 	settings_panel.add_child(dim)
 
 	settings_card = Panel.new()
-	settings_card.position = Vector2(170.0, 46.0)
-	settings_card.size = Vector2(300.0, 272.0)
+	settings_card.position = Vector2(170.0, 32.0)
+	settings_card.size = Vector2(300.0, 308.0)
 	settings_card.pivot_offset = settings_card.size * 0.5
 	settings_card.add_theme_stylebox_override("panel", _sb(COL_CREAM, COL_WOOD, 4, 18, 6, 10))
 	settings_panel.add_child(settings_card)
@@ -594,7 +595,7 @@ func _build_settings_popup() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 
-	var names: Array[String] = ["DISPLAY", "MUSIC", "SOUND", "NUMBERS", "SAVE FILE"]
+	var names: Array[String] = ["DISPLAY", "MUSIC", "SOUND", "NUMBERS", "SAVE FILE", "GAME"]
 	for r: int in range(names.size()):
 		var lbl: Label = _label(settings_card, Vector2(20.0, 34.0 + 36.0 * float(r)), Vector2(100.0, 30.0), names[r], COL_TEXT, 12)
 		lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -620,7 +621,14 @@ func _build_settings_popup() -> void:
 		_toast("GAME SAVED", COL_GREEN)
 	, "cream", 11)
 	set_delete_btn = _button(settings_card, Vector2(205.0, 178.0), Vector2(77.0, 30.0), "DELETE", _open_delete_confirm, "red", 11)
-	_settings_done_btn = _button(settings_card, Vector2(87.0, 224.0), Vector2(126.0, 32.0), "DONE", _close_settings, "green", 14)
+	set_quit_btn = _button(settings_card, Vector2(122.0, 214.0), Vector2(160.0, 30.0), "QUIT GAME", _quit_game, "red", 11)
+	_settings_done_btn = _button(settings_card, Vector2(87.0, 260.0), Vector2(126.0, 32.0), "DONE", _close_settings, "green", 14)
+
+
+# QUIT GAME saves the farm, then closes the game.
+func _quit_game() -> void:
+	Farm.save_game()
+	get_tree().quit()
 
 
 # DELETE SAVE's "are you sure?" popup, on top of settings. KEEP MY FARM is selected first, so
@@ -1967,7 +1975,12 @@ func _smoke_check_settings() -> bool:
 		_smoke_dpad(d)
 		ok = _check(settings_card.is_ancestor_of(nav_target), "the selection left the settings popup") and ok
 	ok = _check(nav_target == _settings_done_btn, "d-pad down through settings should end on DONE") and ok
-	for d: JoyButton in [JOY_BUTTON_DPAD_RIGHT, JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_UP]:
+	_smoke_dpad(JOY_BUTTON_DPAD_UP)
+	ok = _check(nav_target == set_quit_btn and set_quit_btn.text == "QUIT GAME", "QUIT GAME should sit just above DONE") and ok
+	ok = _check(set_quit_btn.pressed.is_connected(_quit_game), "QUIT GAME should save and quit") and ok
+	_smoke_dpad(JOY_BUTTON_DPAD_DOWN)
+	for d: JoyButton in [JOY_BUTTON_DPAD_RIGHT, JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_UP,
+			JOY_BUTTON_DPAD_UP]:
 		_smoke_dpad(d)
 		ok = _check(settings_card.is_ancestor_of(nav_target), "the selection left the settings popup") and ok
 	var tab_before: Tab = tab
