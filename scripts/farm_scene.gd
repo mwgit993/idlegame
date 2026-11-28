@@ -5,6 +5,8 @@ extends Control
 # itself once (Godot keeps the draw commands), so nothing static is redrawn per frame. Per
 # frame we only move or rotate a few Controls: clouds drift, the sun's rays turn, flowers
 # sway, and a rainbow fades in during MOO RUSH.
+# Each animal has its own part of the farm: set_land("cow" / "chicken" / "monkey") swaps the
+# landmark (barn and silo, the hen house, palm trees and a hut), the far hills and the fence.
 
 const W: float = 640.0
 const H: float = 360.0
@@ -19,6 +21,8 @@ var _flowers: Array[Control] = []
 var _flower_phase: Array[float] = []
 var _rays: Control
 var _rainbow: Control
+var land: String = "cow"
+var _themed: Array[Control] = []  # layers that redraw when the theme changes
 
 
 func _ready() -> void:
@@ -42,7 +46,11 @@ func _ready() -> void:
 		cl.scale = Vector2(cd.z, cd.z)
 		_clouds.append(cl)
 		_cloud_speed.append(4.0 + cd.z * 6.0)
-	_layer(_draw_land)
+	_themed.append(_layer(_draw_far_hill))
+	_themed.append(_layer(_draw_landmarks))
+	_layer(_draw_near_land)
+	_themed.append(_layer(_draw_fence))
+	_layer(_draw_tufts)
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 	rng.seed = 2024
 	var spots: Array[Vector2] = [
@@ -55,6 +63,14 @@ func _ready() -> void:
 		fl.position = spots[i]
 		_flowers.append(fl)
 		_flower_phase.append(rng.randf() * TAU)
+
+
+func set_land(id: String) -> void:
+	if id == land:
+		return
+	land = id
+	for c: Control in _themed:
+		c.queue_redraw()
 
 
 func _layer(cb: Callable, parent: Control = null) -> Control:
@@ -150,14 +166,30 @@ func _draw_hill(c: Control, top: PackedVector2Array, col: Color, line: Color) ->
 	c.draw_polyline(top, line, 2.5)
 
 
-func _draw_land(c: Control) -> void:
-	# Far hills.
-	_draw_hill(c, _hill(186.0, 12.0, 0.017, 0.4, 7.0, 0.043, 2.0), Color("#b4e89a"), OUTLINE_FAR)
-	_draw_silo(c)
-	_draw_barn(c)
-	# Bushes at the barn's feet.
+func _draw_far_hill(c: Control) -> void:
+	var col: Color = Color("#7fcf6a") if land == "monkey" else Color("#b4e89a")
+	_draw_hill(c, _hill(186.0, 12.0, 0.017, 0.4, 7.0, 0.043, 2.0), col, OUTLINE_FAR)
+
+
+func _draw_landmarks(c: Control) -> void:
+	match land:
+		"chicken":
+			_draw_hay(c, Vector2(112, 196))
+			_draw_coop(c)
+		"monkey":
+			_draw_hut(c)
+			_draw_palm(c, Vector2(110, 210), 0.18, 1.0)
+			_draw_palm(c, Vector2(14, 212), -0.12, 0.85)
+		_:
+			_draw_silo(c)
+			_draw_barn(c)
+	# Bushes at its feet.
+	var bush: Color = Color("#46a93a") if land == "monkey" else Color("#5fbf3f")
 	for b: Vector3 in [Vector3(10, 207, 10), Vector3(104, 206, 9), Vector3(120, 209, 7)]:
-		Art.fill(c, Art.blob(Vector2(b.x, b.y), b.z, b.x, 0.1, 24), Color("#5fbf3f"), Art.INK, 2.0)
+		Art.fill(c, Art.blob(Vector2(b.x, b.y), b.z, b.x, 0.1, 24), bush, Art.INK, 2.0)
+
+
+func _draw_near_land(c: Control) -> void:
 	# Middle hill and the near field.
 	_draw_hill(c, _hill(212.0, 4.0, 0.03, 1.0, 3.0, 0.08, 0.3), Color("#97dc6c"), OUTLINE_FAR)
 	var field_top: PackedVector2Array = _hill(226.0, 2.5, 0.02, 2.0, 1.5, 0.06, 1.0)
@@ -173,8 +205,9 @@ func _draw_land(c: Control) -> void:
 	for k: int in range(5):
 		var y: float = 252.0 + float(k) * 22.0
 		c.draw_line(Vector2(0, y), Vector2(W, y + 6.0), Color(1, 1, 1, 0.06), 9.0)
-	_draw_fence(c)
-	# Grass tufts.
+
+
+func _draw_tufts(c: Control) -> void:
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 	rng.seed = 77
 	for i: int in range(34):
@@ -227,9 +260,91 @@ func _draw_silo(c: Control) -> void:
 	Art.fill(c, dome, Color("#8fa4b3"), Art.INK, 2.5)
 
 
+# The hen house: a little red coop on stilts with a round door, a ramp and nesting-box windows.
+func _draw_coop(c: Control) -> void:
+	for x: float in [24.0, 70.0]:
+		Art.fill(c, Art.rrect(Rect2(x - 2.5, 186, 5, 22), 1.5), Color("#a8683a"), Art.INK, 2.0)
+	var body: PackedVector2Array = Art.rrect(Rect2(16, 156, 62, 34), 2.0)
+	Art.fill(c, body, Art.BARN, Art.INK, 2.5)
+	for k: int in range(1, 6):
+		c.draw_line(Vector2(16.0 + float(k) * 10.3, 159), Vector2(16.0 + float(k) * 10.3, 188), Color(0, 0, 0, 0.12), 1.2)
+	var roof: PackedVector2Array = Art.round_poly(PackedVector2Array([Vector2(8, 160), Vector2(47, 128), Vector2(86, 160)]), 3.0)
+	Art.fill(c, roof, Color("#ffcc2e"), Art.INK, 2.5)
+	c.draw_polyline(PackedVector2Array([Vector2(16, 156), Vector2(47, 132), Vector2(78, 156)]), Color("#e8a400"), 2.0)
+	Art.fill(c, Art.ellipse(Vector2(47, 176), 8.0, 10.0, 0.0, 24), Color("#4a2620"), Art.WHITE, 2.2)
+	for wx: float in [26.0, 68.0]:
+		Art.fill(c, Art.rrect(Rect2(wx - 6.0, 163, 12, 10), 2.0), Color("#5a2e24"), Art.WHITE, 2.0)
+		c.draw_line(Vector2(wx - 4.0, 171), Vector2(wx + 4.0, 171), Color("#e8b85c"), 2.0)
+	var ramp: PackedVector2Array = PackedVector2Array([Vector2(40, 186), Vector2(54, 186), Vector2(64, 208), Vector2(52, 208)])
+	Art.fill(c, ramp, Color("#e0a66b"), Art.INK, 2.0)
+	for k2: int in range(1, 4):
+		var t: float = float(k2) / 4.0
+		c.draw_line(Vector2(40, 186).lerp(Vector2(52, 208), t), Vector2(54, 186).lerp(Vector2(64, 208), t), Color("#b47a43"), 1.6)
+
+
+func _draw_hay(c: Control, at: Vector2) -> void:
+	var bale: PackedVector2Array = Art.rrect(Rect2(at.x - 13.0, at.y - 8.0, 26, 16), 4.0)
+	Art.fill(c, bale, Color("#f0c85a"), Art.INK, 2.2)
+	for k: int in range(3):
+		c.draw_line(Vector2(at.x - 10.0, at.y - 4.0 + float(k) * 4.0), Vector2(at.x + 10.0, at.y - 5.0 + float(k) * 4.0), Color("#c99a30"), 1.4)
+	for x: float in [-6.0, 6.0]:
+		c.draw_line(Vector2(at.x + x, at.y - 8.0), Vector2(at.x + x, at.y + 8.0), Color("#a8683a"), 1.8)
+
+
+# A palm tree: a curved trunk with ring marks and a crown of fronds. lean tilts it.
+func _draw_palm(c: Control, base: Vector2, lean: float, s: float) -> void:
+	var top: Vector2 = base + Vector2(sin(lean) * 70.0, -80.0) * s
+	var ctrl: Vector2 = base + Vector2(sin(lean) * 10.0, -45.0) * s
+	var pts: PackedVector2Array = PackedVector2Array()
+	for i: int in range(13):
+		var t: float = float(i) / 12.0
+		pts.append(base.lerp(ctrl, t).lerp(ctrl.lerp(top, t), t))
+	Art.inked_stroke(c, pts, Color("#b98552"), 7.0 * s, 2.2)
+	for i2: int in range(2, 12, 2):
+		var p: Vector2 = pts[i2]
+		c.draw_line(p + Vector2(-3.5, 0) * s, p + Vector2(3.5, -1) * s, Color("#8a5a32"), 1.6)
+	for k: int in range(6):
+		var a: float = -PI * 0.5 + (float(k) - 2.5) * 0.62
+		var tip: Vector2 = top + Vector2.from_angle(a) * 30.0 * s + Vector2(0, 10.0 * s * absf(float(k) - 2.5) / 2.5)
+		var mid: Vector2 = top.lerp(tip, 0.5) + Vector2(0, -6.0 * s)
+		var leaf: PackedVector2Array = PackedVector2Array()
+		for j: int in range(9):
+			var t2: float = float(j) / 8.0
+			leaf.append(top.lerp(mid, t2).lerp(mid.lerp(tip, t2), t2))
+		var back: PackedVector2Array = leaf.duplicate()
+		back.reverse()
+		var n: Vector2 = (tip - top).normalized().orthogonal() * 5.0 * s
+		var poly: PackedVector2Array = PackedVector2Array()
+		for j2: int in range(leaf.size()):
+			poly.append(leaf[j2] + n * sin(float(j2) / 8.0 * PI))
+		for j3: int in range(back.size()):
+			poly.append(back[j3] - n * sin(float(back.size() - 1 - j3) / 8.0 * PI))
+		Art.fill(c, poly, Color("#4fbf3a"), Art.INK, 2.0)
+	for nut: Vector2 in [Vector2(-3, 4), Vector2(3, 5)]:
+		Art.circle(c, top + nut * s, 3.2 * s, Color("#7a4a26"), Art.INK, 1.6)
+
+
+# A little bamboo hut with a straw roof.
+func _draw_hut(c: Control) -> void:
+	var body: PackedVector2Array = Art.rrect(Rect2(28, 168, 48, 40), 2.0)
+	Art.fill(c, body, Color("#d8b25a"), Art.INK, 2.5)
+	for k: int in range(1, 6):
+		var x: float = 28.0 + float(k) * 8.0
+		c.draw_line(Vector2(x, 170), Vector2(x, 206), Color("#a8843a"), 1.4)
+	Art.fill(c, Art.rrect(Rect2(44, 182, 16, 26), 6.0), Color("#5a3a20"), Art.INK, 2.0)
+	var roof: PackedVector2Array = Art.round_poly(PackedVector2Array([Vector2(18, 172), Vector2(52, 140), Vector2(86, 172)]), 4.0)
+	Art.fill(c, roof, Color("#e8c46a"), Art.INK, 2.5)
+	for k2: int in range(6):
+		var x2: float = 26.0 + float(k2) * 10.0
+		c.draw_line(Vector2(x2, 171), Vector2(lerpf(x2, 52.0, 0.35), 158), Color("#c9a040"), 1.4)
+
+
 func _draw_fence(c: Control) -> void:
-	var wood: Color = Color("#e0a66b")
-	var wood_dark: Color = Color("#b47a43")
+	if land == "monkey":
+		_draw_bamboo_fence(c)
+		return
+	var wood: Color = Color("#e0a66b") if land != "chicken" else Color("#fffdf6")
+	var wood_dark: Color = Color("#b47a43") if land != "chicken" else Color("#d6cfc0")
 	for rail_y: float in [221.0, 233.0]:
 		var rail: PackedVector2Array = Art.rrect(Rect2(-4, rail_y, PANEL_W + 12.0, 5.0), 2.0)
 		Art.fill(c, rail, wood, Art.INK, 2.0)
@@ -241,6 +356,18 @@ func _draw_fence(c: Control) -> void:
 		Art.fill(c, post, wood, Art.INK, 2.0)
 		c.draw_line(Vector2(x + 1.5, 217), Vector2(x + 1.5, 242), wood_dark, 1.2)
 		x += 28.0
+
+
+func _draw_bamboo_fence(c: Control) -> void:
+	var cane: Color = Color("#b9d65a")
+	var joint: Color = Color("#7fa83a")
+	Art.fill(c, Art.rrect(Rect2(-4, 226, PANEL_W + 12.0, 5.0), 2.0), cane, Art.INK, 2.0)
+	var x: float = 4.0
+	while x < PANEL_W + 6.0:
+		Art.fill(c, Art.rrect(Rect2(x - 3.0, 212, 6, 32), 2.5), cane, Art.INK, 2.0)
+		for jy: float in [222.0, 234.0]:
+			c.draw_line(Vector2(x - 3.0, jy), Vector2(x + 3.0, jy), joint, 1.8)
+		x += 14.0
 
 
 func _draw_flower(c: Control, petal: Color, s: float) -> void:

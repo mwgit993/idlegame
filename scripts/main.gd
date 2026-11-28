@@ -1,18 +1,23 @@
 extends Node2D
 
 # Udderly Idle: the whole screen is built here in code (a 640x360 layout, scaled smoothly to
-# the window). Left: the farm and the cow (click to squeeze the udder). Right: four tabs:
+# the window). Left: the farm and the animal (click the cow to squeeze the udder), with buttons
+# to switch between the cow, the hen and the monkey (each has its own economy in Farm; the tab
+# names and texts below change with the animal). Right: four tabs:
 #   DAIRY      your businesses: click an icon to sell, buy more, watch the bars fill
 #   UPGRADES   one-time profit multipliers
 #   FARMHANDS  hire one per business so it runs by itself (and while the game is closed)
 #   PASTURE    golden cowbells (prestige), stats and settings
 # All state lives in the Farm autoload; this script draws it and forwards input. The art is
-# cartoon vector drawing: the cow is scripts/cow.gd, the background scripts/farm_scene.gd,
+# cartoon vector drawing: the cow is scripts/cow.gd, the hen scripts/chicken.gd, the monkey
+# scripts/monkey.gd (both built on scripts/critter.gd), the background scripts/farm_scene.gd,
 # icons and shape helpers are in the Art autoload.
 
 const Data = preload("res://scripts/game_data.gd")
 const Fmt = preload("res://scripts/num_fmt.gd")
 const Cow = preload("res://scripts/cow.gd")
+const Chicken = preload("res://scripts/chicken.gd")
+const Monkey = preload("res://scripts/monkey.gd")
 const Pails = preload("res://scripts/milk_pails.gd")
 const FarmScene = preload("res://scripts/farm_scene.gd")
 
@@ -44,7 +49,7 @@ const COL_TAN: Color = Color("#c9a77a")
 
 enum Tab { DAIRY, UPGRADES, FARMHANDS, PASTURE }
 const BUY_MODES: Array[String] = ["x1", "x10", "x100", "NEXT", "MAX"]
-const TAB_NAMES: Array[String] = ["DAIRY", "UPGRADES", "FARMHANDS", "PASTURE"]
+const THEMES: Array[String] = ["cow", "chicken", "monkey"]  # FarmScene theme per animal
 
 var ui: CanvasLayer
 var tab: Tab = Tab.DAIRY
@@ -52,8 +57,11 @@ var buy_mode: int = 0
 
 # Left panel
 var farm_scene: Control
-var cow: Control
-var cow_btn: Button
+var cow: Control          # the cow (scripts/cow.gd)
+var critters: Array[Control] = []  # cow, hen, monkey; only the one on screen is shown
+var critter: Control      # the animal on screen
+var cow_btn: Button       # the invisible button over the animal (any animal, despite the name)
+var animal_btns: Array[Button] = []
 var fx: Control
 var click_lbl: Label
 var rush_bar: Control
@@ -87,6 +95,8 @@ var hand_faces: Array[Control] = []
 var hand_lbls: Array[Label] = []
 var hand_sub_lbls: Array[Label] = []
 var pasture_lbl: Label
+var pasture_title: Label
+var pasture_icon: Control
 var move_btn: Button
 var settings_btn: Button             # the gear at the right end of the top bar
 var settings_panel: Control
@@ -109,6 +119,7 @@ var offline_card: Panel
 var offline_lbl: Label
 var offline_money_lbl: Label
 var offline_time_lbl: Label
+var offline_extra_lbl: Label
 
 var _t: float = 0.0
 var _clicks_since_moo: int = 0
@@ -148,7 +159,9 @@ func _ready() -> void:
 	_build_ui()
 	Farm.milestone_reached.connect(_on_milestone)
 	Farm.rush_started.connect(_on_rush_started)
-	Farm.rush_ended.connect(func() -> void: _toast("MOO RUSH OVER", COL_TAN))
+	Farm.rush_ended.connect(func() -> void: _toast("%s OVER" % String(Farm.info()["rush"]), COL_TAN))
+	Farm.animal_opened.connect(_on_animal_opened)
+	_apply_animal()
 	_set_tab(Tab.DAIRY)
 	_refresh_all()
 	nav_target = cow_btn
@@ -159,7 +172,7 @@ func _ready() -> void:
 	if "--smoke-test" in OS.get_cmdline_user_args():
 		_run_smoke_test()
 		return
-	if Farm.last_offline_earned > 0.0:
+	if _offline_total() > 0.0:
 		_show_offline(Farm.last_offline_earned, Farm.last_offline_seconds)
 
 
@@ -334,6 +347,7 @@ func _build_ui() -> void:
 	farm_scene = FarmScene.new()
 	ui.add_child(farm_scene)
 	_build_cow_panel()
+	_build_animal_bar()
 	_build_top_bar()
 
 	_panel(ui, PANEL, _sb(COL_CREAM, COL_WOOD, 3, 14, 5, 6))
@@ -365,8 +379,11 @@ func _build_ui() -> void:
 
 func _build_cow_panel() -> void:
 	cow = Cow.new()
-	cow.size = Vector2(W, H)
-	ui.add_child(cow)
+	critters = [cow, Chicken.new(), Monkey.new()]
+	for c: Control in critters:
+		c.size = Vector2(W, H)
+		ui.add_child(c)
+	critter = cow
 
 	cow_btn = Button.new()
 	cow_btn.position = Vector2(12.0, 138.0)
@@ -380,7 +397,7 @@ func _build_cow_panel() -> void:
 	cow_btn.button_down.connect(_on_squeeze)
 	ui.add_child(cow_btn)
 
-	hint_lbl = _label(ui, Vector2(0.0, 114.0), Vector2(LEFT_W, 18.0), "CLICK THE COW TO MILK HER!", Color.WHITE, 12, 5)
+	hint_lbl = _label(ui, Vector2(0.0, 117.0), Vector2(LEFT_W, 18.0), "CLICK THE COW TO MILK HER!", Color.WHITE, 12, 5)
 	hint_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hint_lbl.pivot_offset = hint_lbl.size * 0.5
 
@@ -391,6 +408,20 @@ func _build_cow_panel() -> void:
 	fx = _canvas(ui, Rect2(0.0, 0.0, W, H), func(_c: Control) -> void: _draw_fx())
 
 
+# Round buttons in the sky above the animal: one per animal. A locked one shows a padlock and,
+# when pressed, what opens it.
+func _build_animal_bar() -> void:
+	for a: int in range(Farm.animal_count()):
+		var b: Button = _button(ui, Vector2(8.0 + float(a) * 34.0, 80.0), Vector2(30.0, 30.0), "", _on_animal_btn.bind(a), "card")
+		b.tooltip_text = String(Farm.info(a)["place"])
+		b.draw.connect(func() -> void:
+			var dy: float = 1.0 if b.button_pressed else 0.0
+			Art.draw_icon(b, String(Farm.info(a)["face"]), b.size * 0.5 + Vector2(0.0, dy), 24.0)
+			if not Farm.is_open(a):
+				Art.draw_icon(b, "lock", Vector2(b.size.x - 7.0, b.size.y - 7.0), 13.0))
+		animal_btns.append(b)
+
+
 func _build_top_bar() -> void:
 	_panel(ui, Rect2(-6.0, -12.0, W + 12.0, TOP_H + 12.0), _sb(COL_BARN, INK, 2, 12, 4, 4))
 	_canvas(ui, Rect2(2.0, 3.0, 26.0, 26.0), func(c: Control) -> void: Art.draw_icon(c, "coin", Vector2(13.0, 13.0), 23.0))
@@ -399,7 +430,8 @@ func _build_top_bar() -> void:
 	money_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	rate_lbl = _label(ui, Vector2(31.0, 20.0), Vector2(200.0, 12.0), "", COL_LIGHT, FS_SMALL, 3)
 	for t: int in range(4):
-		var b: Button = _button(ui, Vector2(RX - 4.0 + float(t) * 92.0, 4.0), Vector2(88.0, 25.0), TAB_NAMES[t], _set_tab.bind(t), "cream", 12)
+		var names: Array = Farm.info()["tabs"]
+		var b: Button = _button(ui, Vector2(RX - 4.0 + float(t) * 92.0, 4.0), Vector2(88.0, 25.0), String(names[t]), _set_tab.bind(t), "cream", 12)
 		b.draw.connect(_draw_tab_badge.bind(b, t))
 		tab_btns.append(b)
 	settings_btn = _button(ui, Vector2(RX - 4.0 + 4.0 * 92.0 + 2.0, 4.0), Vector2(30.0, 25.0), "", _open_settings, "cream", 12)
@@ -426,7 +458,7 @@ func _build_dairy_page(page: Control) -> void:
 		icon_b.size = Vector2(30.0, 30.0)
 		_style_btn(icon_b, "card")
 		icon_b.pressed.connect(_on_biz_clicked.bind(i))
-		icon_b.draw.connect(_draw_biz_icon.bind(icon_b, String(Farm.biz(i)["id"])))
+		icon_b.draw.connect(_draw_biz_icon.bind(icon_b, i))
 		page.add_child(icon_b)
 		_bouncy(icon_b)
 		biz_icon_btns.append(icon_b)
@@ -466,20 +498,20 @@ func _build_farmhands_page(page: Control) -> void:
 	for i: int in range(Farm.biz_count()):
 		var ry: float = ROW_Y + float(i) * ROW_H
 		_row_card(page, ry, ROW_H - 2.0)
-		var id: String = String(Farm.biz(i)["id"])
 		hand_faces.append(_canvas(page, Rect2(RX, ry, 36.0, 34.0), func(c: Control) -> void:
 			Art.draw_icon(c, "farmhand", Vector2(16.0, 16.0), 28.0)
-			Art.draw_icon(c, id, Vector2(29.0, 26.0), 16.0)))
+			Art.draw_icon(c, String(Farm.biz(i)["id"]), Vector2(29.0, 26.0), 16.0)))
 		hand_lbls.append(_label(page, Vector2(RX + 40.0, ry + 2.0), Vector2(240.0, 15.0), String(Farm.biz(i)["farmhand"]), COL_TEXT, FS))
 		hand_sub_lbls.append(_label(page, Vector2(RX + 40.0, ry + 17.0), Vector2(240.0, 14.0), "", COL_DIM, 10))
 		hand_btns.append(_button(page, Vector2(BTN_X, ry + 2.0), Vector2(106.0, 30.0), "", _on_hire.bind(i), "red", 10))
 
 
 func _build_pasture_page(page: Control) -> void:
-	_canvas(page, Rect2(RX + 2.0, 42.0, 30.0, 30.0), func(c: Control) -> void: Art.draw_icon(c, "bell", Vector2(15.0, 15.0), 28.0))
-	var title: Label = _label(page, Vector2(RX + 38.0, 42.0), Vector2(300.0, 28.0), "GOLDEN COWBELLS", COL_GOLD, 18, 5)
-	title.add_theme_font_override("font", Art.font_bold)
-	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	pasture_icon = _canvas(page, Rect2(RX + 2.0, 42.0, 30.0, 30.0), func(c: Control) -> void:
+		Art.draw_icon(c, String(Farm.info()["gold_icon"]), Vector2(15.0, 15.0), 28.0))
+	pasture_title = _label(page, Vector2(RX + 38.0, 42.0), Vector2(300.0, 28.0), "", COL_GOLD, 18, 5)
+	pasture_title.add_theme_font_override("font", Art.font_bold)
+	pasture_title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_row_card(page, 74.0, 214.0)
 	pasture_lbl = _label(page, Vector2(RX + 6.0, 79.0), Vector2(380.0, 206.0), "", COL_TEXT, 10)
 	pasture_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -520,9 +552,12 @@ func _build_offline_popup() -> void:
 	offline_money_lbl.add_theme_font_override("font", Art.font_bold)
 	offline_money_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	offline_money_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	offline_time_lbl = _label(offline_card, Vector2(20.0, 102.0), Vector2(280.0, 30.0), "", COL_DIM, 11)
+	offline_time_lbl = _label(offline_card, Vector2(20.0, 94.0), Vector2(280.0, 16.0), "", COL_DIM, 11)
 	offline_time_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	offline_time_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	offline_extra_lbl = _label(offline_card, Vector2(20.0, 110.0), Vector2(280.0, 26.0), "", COL_TEXT, 9)
+	offline_extra_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	offline_extra_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_collect_btn = _button(offline_card, Vector2(90.0, 138.0), Vector2(140.0, 38.0), "COLLECT", func() -> void:
 		_hide_offline()
 		Sfx.play("coin")
@@ -728,10 +763,25 @@ func _open_card() -> Control:
 	return null
 
 
+# What every animal's farmhands made while the game was closed.
+func _offline_total() -> float:
+	var total: float = 0.0
+	for p: RefCounted in Farm.pens:
+		total += float(p.get("offline_earned"))
+	return total
+
+
+# amount is the animal on screen's; the other animals' earnings are listed under it.
 func _show_offline(amount: float, seconds: int) -> void:
 	offline_money_lbl.text = Fmt.money(amount)
 	_set_font_size(offline_money_lbl, _fit_size(offline_money_lbl.get_theme_font("font"), offline_money_lbl.text, offline_money_lbl.size.x, 26, 12))
 	offline_time_lbl.text = "WHILE YOU WERE AWAY (%s)." % Fmt.duration(float(seconds))
+	var extra: Array[String] = []
+	for a: int in range(Farm.animal_count()):
+		var got: float = float(Farm.pens[a].get("offline_earned"))
+		if a != Farm.animal and got > 0.0:
+			extra.append("%s: +%s" % [String(Farm.info(a)["place"]), Fmt.short_money(got)])
+	offline_extra_lbl.text = "   ".join(extra)
 	offline_panel.visible = true
 	offline_card.scale = Vector2(0.4, 0.4)
 	var tw: Tween = offline_card.create_tween()
@@ -747,16 +797,17 @@ func _hide_offline() -> void:
 # =========================================================================================
 func _on_squeeze() -> void:
 	var v: float = Farm.squeeze()
-	cow.squeeze()
-	Sfx.play("squirt", -8.0, 0.12)
+	critter.squeeze()
+	var id: String = String(Farm.info()["id"])
+	Sfx.play({"cow": "squirt", "chicken": "pop", "monkey": "pluck"}.get(id, "squirt"), -8.0, 0.12)
 	_clicks_since_moo += 1
-	# She moos now and then (roughly every 15 squeezes), never twice in a row too quickly.
+	# The animal calls out now and then (roughly every 15 clicks), never twice in a row too quickly.
 	if _clicks_since_moo >= 10 and randf() < 0.2:
 		_clicks_since_moo = 0
-		Sfx.play("moo", -4.0, 0.08)
+		_animal_voice(-4.0)
 	hint_lbl.visible = Farm.total_clicks < 20
 	if _floaters.size() < 40:
-		var g: Vector2 = cow.ground
+		var g: Vector2 = critter.get("ground")
 		_floaters.append({"pos": g + Vector2(randf_range(-75.0, 70.0), randf_range(-178.0, -140.0)), "text": "+" + Fmt.short_money(v),
 			"life": 1.0, "max": 1.0, "col": COL_GOLD if Farm.rush_left > 0.0 else Color.WHITE, "drift": randf_range(-14.0, 14.0)})
 
@@ -1095,11 +1146,12 @@ func _nav_activate_button(b: Button) -> void:
 
 
 func _hint_text() -> String:
+	var verb: String = String(Farm.info()["verb"])
 	if nav_on and _nav_pad:
-		return "PRESS A TO MILK HER!" if nav_target == cow_btn else "PRESS X TO MILK HER!"
+		return ("PRESS A TO %s!" if nav_target == cow_btn else "PRESS X TO %s!") % verb
 	if nav_on:
-		return "PRESS SPACE TO MILK HER!"
-	return "CLICK THE COW TO MILK HER!"
+		return "PRESS SPACE TO %s!" % verb
+	return String(Farm.info()["hint"])
 
 
 func _set_tab(t: int) -> void:
@@ -1169,7 +1221,7 @@ func _on_move_pasture() -> void:
 	var gained: int = Farm.move_pasture()
 	if gained > 0:
 		Sfx.play("bell")
-		_toast("+%d GOLDEN COWBELLS! A FRESH PASTURE AWAITS." % gained, Color("#f0a800"))
+		_toast("+%d %s! %s" % [gained, String(Farm.info()["gold"]), String(Farm.info()["fresh"])], Color("#f0a800"))
 		_set_tab(Tab.DAIRY)
 	else:
 		Sfx.play("cant", -10.0)
@@ -1182,9 +1234,62 @@ func _on_milestone(i: int, count: int) -> void:
 
 
 func _on_rush_started() -> void:
-	_toast("MOO RUSH! EVERYTHING EARNS x3!", COL_PINK)
+	_toast("%s! EVERYTHING EARNS x3!" % String(Farm.info()["rush"]), COL_PINK)
 	Sfx.play("rush")
-	Sfx.play("moo", -2.0, 0.0)
+	_animal_voice(-2.0)
+
+
+# The animal on screen moos, clucks or ooks.
+func _animal_voice(vol: float) -> void:
+	var id: String = String(Farm.info()["id"])
+	Sfx.play({"cow": "moo", "chicken": "cluck", "monkey": "ook"}.get(id, "moo"), vol, 0.08)
+
+
+func _on_animal_btn(a: int) -> void:
+	if a == Farm.animal:
+		return
+	if not Farm.set_animal(a):
+		Sfx.play("cant", -10.0)
+		_toast("%s OPENS AT %s!" % [String(Farm.info(a)["place"]), Farm.unlock_text(a)], COL_TAN)
+		return
+	_apply_animal()
+	_animal_voice(-6.0)
+	_toast("%s!" % String(Farm.info()["place"]), COL_GREEN)
+	_refresh_all()
+
+
+func _on_animal_opened(a: int) -> void:
+	Sfx.play("milestone")
+	_toast("NEW! %s IS OPEN. TAP THE %s UP TOP!" % [String(Farm.info(a)["place"]), String(Farm.info(a)["name"])], Color("#f0a800"))
+	for b: Button in animal_btns:
+		b.queue_redraw()
+
+
+# Shows the animal on screen: its character, its part of the farm, its tab names and icons.
+func _apply_animal() -> void:
+	var a: int = Farm.animal
+	critter = critters[a]
+	for i: int in range(critters.size()):
+		critters[i].visible = i == a
+		critters[i].set_process(i == a)
+	farm_scene.call("set_land", THEMES[a])
+	var names: Array = Farm.info()["tabs"]
+	for t: int in range(tab_btns.size()):
+		tab_btns[t].text = String(names[t])
+	for b: Button in biz_icon_btns:
+		b.queue_redraw()
+	for c: Control in hand_faces:
+		c.queue_redraw()
+	for c2: Control in upg_icons:
+		c2.queue_redraw()
+	for b2: Button in animal_btns:
+		b2.queue_redraw()
+	pasture_icon.queue_redraw()
+	pasture_title.text = String(Farm.info()["gold"])
+	for r: int in range(upg_ids.size()):
+		upg_ids[r] = ""
+	hint_lbl.visible = Farm.total_clicks < 20
+	hint_lbl.text = _hint_text()
 
 
 func _toast(text: String, col: Color) -> void:
@@ -1238,7 +1343,10 @@ func _refresh_all() -> void:
 	var rate: float = Farm.idle_income_per_sec() * Farm.rush_mult()
 	rate_lbl.text = "%s /SEC FROM FARMHANDS" % Fmt.money(rate) if rate > 0.0 else "HIRE FARMHANDS FOR IDLE INCOME"
 	_set_font_size(rate_lbl, _fit_size(rate_lbl.get_theme_font("font"), rate_lbl.text, rate_lbl.size.x, FS_SMALL, 7))
-	click_lbl.text = "SQUEEZE: +%s" % Fmt.money(Farm.click_value())
+	click_lbl.text = "%s: +%s" % [String(Farm.info()["click"]), Fmt.money(Farm.click_value())]
+	for a: int in range(animal_btns.size()):
+		_set_kind(animal_btns[a], "gold" if a == Farm.animal else "card")
+		animal_btns[a].modulate = Color.WHITE if Farm.is_open(a) else Color(1, 1, 1, 0.6)
 	rush_bar.queue_redraw()
 	_refresh_tab_badges()
 	match tab:
@@ -1254,7 +1362,7 @@ func _refresh_all() -> void:
 
 func _refresh_tab_badges() -> void:
 	var any_upg: bool = false
-	for u: Dictionary in Data.UPGRADES:
+	for u: Dictionary in Farm.upgrade_list():
 		if Farm.can_buy_upgrade(u):
 			any_upg = true
 			break
@@ -1303,11 +1411,11 @@ func _time_left(i: int) -> String:
 
 func _refresh_upgrades() -> void:
 	var avail: Array[Dictionary] = []
-	for u: Dictionary in Data.UPGRADES:
+	for u: Dictionary in Farm.upgrade_list():
 		if not Farm.upgrades.has(String(u["id"])):
 			avail.append(u)
 	avail.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return float(a["cost"]) < float(b["cost"]))
-	upg_header.text = "UPGRADES BOUGHT: %d / %d" % [Farm.upgrades.size(), Data.UPGRADES.size()]
+	upg_header.text = "UPGRADES BOUGHT: %d / %d" % [Farm.upgrades.size(), Farm.upgrade_list().size()]
 	for r: int in range(upg_rows.size()):
 		if r < avail.size():
 			var u: Dictionary = avail[r]
@@ -1328,6 +1436,7 @@ func _refresh_farmhands() -> void:
 	for i: int in range(Farm.biz_count()):
 		var b: Dictionary = Farm.biz(i)
 		var cost: float = float(b["farmhand_cost"])
+		hand_lbls[i].text = String(b["farmhand"])
 		if Farm.farmhands[i]:
 			hand_btns[i].text = "HIRED!"
 			_set_kind(hand_btns[i], "hired")
@@ -1343,17 +1452,23 @@ func _refresh_farmhands() -> void:
 
 
 func _refresh_pasture() -> void:
+	var inf: Dictionary = Farm.info()
+	var gold: String = String(inf["gold"])
 	var claim: int = Farm.claimable_bells()
+	var next_txt: String = ""
+	for a: int in range(Farm.animal_count()):
+		if int(Farm.info(a)["needs"]) == Farm.animal and not Farm.is_open(a):
+			next_txt = "\n%s OPENS AT %d %s." % [String(Farm.info(a)["place"]), int(Farm.info(a)["needs_gold"]), gold]
 	pasture_lbl.text = (
-		"YOU HAVE %d GOLDEN COWBELLS. EACH ONE GIVES +2%% PROFIT, SO YOU EARN x%.2f.\n\n"
-		% [Farm.bells, Farm.bell_mult()]
-		+ "MOVING TO A BIGGER PASTURE SELLS YOUR WHOLE FARM (MONEY, BUSINESSES, FARMHANDS AND UPGRADES) "
-		+ "BUT KEEPS YOUR COWBELLS, AND GIVES YOU NEW ONES FOR EVERYTHING YOU'VE EARNED.\n\n"
-		+ "MOVING NOW EARNS: %d COWBELLS\n" % claim
-		+ "NEXT COWBELL AT %s TOTAL EARNED (NOW %s).\n\n" % [Fmt.money(Farm.earned_for_next_bell()), Fmt.money(Farm.total_earned)]
-		+ "SQUEEZES: %s   PASTURES MOVED: %d" % [Fmt.commas(float(Farm.total_clicks)), Farm.pastures_moved]
+		"YOU HAVE %d %s. EACH ONE GIVES +2%% PROFIT HERE, SO YOU EARN x%.2f.%s\n\n"
+		% [Farm.bells, gold, Farm.bell_mult(), next_txt]
+		+ "%s (MONEY, BUSINESSES, FARMHANDS AND UPGRADES) " % String(inf["move_desc"])
+		+ "BUT KEEPS YOUR %s, AND GIVES YOU NEW ONES FOR EVERYTHING YOU'VE EARNED.\n\n" % gold
+		+ "DOING IT NOW EARNS: %d %s\n" % [claim, gold]
+		+ "NEXT ONE AT %s TOTAL EARNED (NOW %s).\n\n" % [Fmt.money(Farm.earned_for_next_bell()), Fmt.money(Farm.total_earned)]
+		+ "%s: %s   %s: %d" % [String(inf["clicks"]), Fmt.commas(float(Farm.total_clicks)), String(inf["moved"]), Farm.pastures_moved]
 	)
-	move_btn.text = "MOVE TO A BIGGER PASTURE (+%d)" % claim
+	move_btn.text = "%s (+%d)" % [String(inf["move"]), claim]
 	_set_font_size(move_btn, _fit_size(move_btn.get_theme_font("font"), move_btn.text, move_btn.size.x - 18.0, 13, 8))
 	_set_enabled(move_btn, claim > 0)
 
@@ -1402,7 +1517,8 @@ func _draw_rush_bar() -> void:
 	else:
 		_sb_fill_pink.bg_color = Color("#ef5c9c")
 	_draw_fill(rush_bar, r, fill, _sb_fill_pink)
-	var txt: String = "MOO RUSH! x3  %s" % Fmt.duration(Farm.rush_left) if on else "MOO RUSH METER (KEEP MILKING!)"
+	var rush: String = String(Farm.info()["rush"])
+	var txt: String = "%s! x3  %s" % [rush, Fmt.duration(Farm.rush_left)] if on else "%s METER (KEEP CLICKING!)" % rush
 	_draw_bar_text(rush_bar, txt, Rect2(14.0, 0.0, r.size.x - 14.0, r.size.y), 9)
 	var beat: float = 1.0 + (0.18 * maxf(0.0, sin(_t * 9.0)) if on else 0.0)
 	Art.fill(rush_bar, Art.heart(Vector2(9.0, r.size.y * 0.5), 15.0 * beat, 28), Color("#ff3d6e"), INK, 1.8)
@@ -1418,9 +1534,9 @@ func _draw_tab_badge(b: Button, t: int) -> void:
 	b.draw_string(font, c + Vector2(-tw * 0.5, 4.0), "!", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color.WHITE)
 
 
-func _draw_biz_icon(b: Button, id: String) -> void:
+func _draw_biz_icon(b: Button, i: int) -> void:
 	var dy: float = 1.0 if b.button_pressed else -1.0
-	Art.draw_icon(b, id, b.size * 0.5 + Vector2(0.0, dy), 26.0)
+	Art.draw_icon(b, String(Farm.biz(i)["id"]), b.size * 0.5 + Vector2(0.0, dy), 26.0)
 
 
 func _draw_upgrade_icon(c: Control, r: int) -> void:
@@ -1428,7 +1544,7 @@ func _draw_upgrade_icon(c: Control, r: int) -> void:
 	if id == "":
 		return
 	var u: Dictionary = {}
-	for x: Dictionary in Data.UPGRADES:
+	for x: Dictionary in Farm.upgrade_list():
 		if String(x["id"]) == id:
 			u = x
 			break
@@ -1437,7 +1553,7 @@ func _draw_upgrade_icon(c: Control, r: int) -> void:
 		"biz":
 			icon = String(Farm.biz(int(u["target"]))["id"])
 		"click":
-			icon = "drop"
+			icon = String(Farm.info()["click_icon"])
 		"click_share":
 			icon = "coin"
 	Art.draw_icon(c, icon, Vector2(16.0, 16.0), 28.0)
@@ -1504,8 +1620,17 @@ func _run_smoke_test() -> void:
 	ok = _check(Fmt.money(3.2e9) == "$3.200 BILLION", "big format: " + Fmt.money(3.2e9)) and ok
 	ok = _check(Fmt.short(3.2e9) == "3.20B", "short format: " + Fmt.short(3.2e9)) and ok
 	ok = _check(Fmt.duration(3725.0) == "1H 02M", "duration format: " + Fmt.duration(3725.0)) and ok
-	for b: Dictionary in Data.BUSINESSES:
-		ok = _check(Art.has_icon(String(b["id"])), "no icon for business " + String(b["id"])) and ok
+	for an: Dictionary in Data.ANIMALS:
+		var bl: Array = an["businesses"]
+		for bv: Variant in bl:
+			var b: Dictionary = bv
+			ok = _check(Art.has_icon(String(b["id"])), "no icon for business " + String(b["id"])) and ok
+		for key: String in ["gold_icon", "click_icon", "face"]:
+			ok = _check(Art.has_icon(String(an[key])), "no %s icon for %s" % [key, String(an["id"])]) and ok
+	# Only the cow is open on a new farm; the hen's button says what opens it.
+	ok = _check(Farm.animal == 0 and not Farm.is_open(1) and not Farm.is_open(2) and not Farm.set_animal(1), "a new farm should have only the cow") and ok
+	_on_animal_btn(1)
+	ok = _check(Farm.animal == 0 and critter == cow and toast_lbl.text.contains("20 GOLDEN COWBELLS"), "a locked animal's button should say what opens it") and ok
 
 	# Squeezing and the first sale.
 	for k: int in range(5):
@@ -1615,6 +1740,9 @@ func _run_smoke_test() -> void:
 	ok = _check(is_equal_approx(Farm.bell_mult(), 3.0), "100 bells should give x3") and ok
 	ok = _check(Farm.claimable_bells() == 0, "bells were claimable twice") and ok
 
+	# The hen and the monkey: unlocking, switching, separate economies, saving.
+	ok = _smoke_check_animals() and ok
+
 	# Music: one 8-bar pass renders, isn't silent, and fits the loop length.
 	var pcm: PackedByteArray = Music.render_loop(1)
 	var loudest: int = 0
@@ -1625,6 +1753,8 @@ func _run_smoke_test() -> void:
 	var sq: Array = Sfx._variants.get("squirt", [])
 	var moo: Array = Sfx._variants.get("moo", [])
 	ok = _check(sq.size() >= 3 and moo.size() >= 3, "missing squeeze or moo takes") and ok
+	for nm: String in ["cluck", "ook", "pop", "pluck"]:
+		ok = _check(Sfx._streams.has(nm), "missing sound " + nm) and ok
 
 	# Milk goes into pails, never on the grass, and the wagon collects the full ones.
 	ok = _smoke_check_pails() and ok
@@ -1650,6 +1780,100 @@ func _run_smoke_test() -> void:
 	else:
 		print("UDDERLY_SMOKE_TEST_FAILED")
 		get_tree().quit(1)
+
+
+# The hen opens at 20 golden cowbells (the test just moved pasture for 100), the monkey at 3
+# golden eggs. Each animal keeps its own money, businesses and upgrades, farmhands keep earning
+# for the animals not on screen, and everything survives a save, including old one-animal saves.
+func _smoke_check_animals() -> bool:
+	var ok: bool = true
+	ok = _check(Farm.is_open(1) and not Farm.is_open(2), "100 golden cowbells should open the hen house only") and ok
+	var cow_money: float = Farm.money
+	var cow_owned: Array[int] = Farm.owned.duplicate()
+	Farm.money = 5.0e6
+	for i: int in range(Farm.biz_count()):
+		Farm.buy(i, 1)
+		Farm.hire(i)
+	cow_money = Farm.money
+	cow_owned = Farm.owned.duplicate()
+	_on_animal_btn(1)
+	ok = _check(Farm.animal == 1 and critter == critters[1] and critters[1].visible and not cow.visible, "switching to the hen failed") and ok
+	ok = _check(tab_btns[0].text == "EGGS" and Farm.money == 0.0 and Farm.owned[0] == 1 and Farm.owned[1] == 0, "the hen should start a fresh economy") and ok
+	ok = _check(String(Farm.biz(0)["id"]) == "eggbasket" and hint_lbl.text.contains("HEN"), "the hen's businesses and hint should show") and ok
+	for k: int in range(5):
+		_on_squeeze()
+	ok = _check(is_equal_approx(Farm.money, 5.0) and critters[1].call("particle_count") > 0, "clucks should earn the hen money and lay eggs") and ok
+	for k2: int in range(12):
+		_on_squeeze()
+	for f: int in range(40):
+		critters[1].call("_process", 0.03)
+	ok = _check(int(critters[1].get("shipped")) >= 2 and int(critters[1].get("stored")) < 6, "eggs should land in the nest and it should empty when full") and ok
+	# The cow's farmhands keep working while the hen is on screen.
+	for s2: int in range(20):
+		Farm.tick(0.5)
+	ok = _check(Farm.pens[0].get("money") > cow_money and Farm.pens[0].get("owned") == cow_owned, "the cow should keep earning in the background") and ok
+	# The hen's own businesses, farmhands and upgrades; the cow's upgrades don't apply here.
+	Farm.money = 1.0e9
+	ok = _check(Farm.buy(1, 5) and Farm.hire(1) and Farm.buy_upgrade("c_happy") and not Farm.buy_upgrade("happy_cows"), "hen purchases failed") and ok
+	for t: int in range(4):
+		_set_tab(t)
+		_refresh_all()
+	ok = _check(pasture_title.text == "GOLDEN EGGS" and move_btn.text.begins_with("BUILD A BIGGER HEN HOUSE"), "the hen's prestige page should talk about golden eggs") and ok
+	# Golden eggs open the monkey.
+	Farm.total_earned = 9.0e7
+	ok = _check(Farm.claimable_bells() == 3, "9e7 earned should give 3 golden eggs, got %d" % Farm.claimable_bells()) and ok
+	_on_move_pasture()
+	ok = _check(Farm.bells == 3 and Farm.is_open(2) and Farm.pens[0].get("gold") == 100, "3 golden eggs should open the banana grove") and ok
+	_on_animal_btn(2)
+	ok = _check(Farm.animal == 2 and tab_btns[0].text == "BANANAS" and String(Farm.biz(0)["id"]) == "bunch", "switching to the monkey failed") and ok
+	for k3: int in range(7):
+		_on_squeeze()
+	for f2: int in range(40):
+		critters[2].call("_process", 0.03)
+	ok = _check(is_equal_approx(Farm.money, 7.0) and int(critters[2].get("shipped")) >= 1, "picks should earn the monkey money and fill the crate") and ok
+	for t2: int in range(4):
+		_set_tab(t2)
+		_refresh_all()
+	_set_tab(Tab.DAIRY)
+	# Save and load keeps every animal and which one was on screen.
+	Farm.money = 4321.0
+	Farm.save_game()
+	var saved: Dictionary = _read_save()
+	var hen_owned: Array[int] = (Farm.pens[1].get("owned") as Array[int]).duplicate()
+	Farm.reset_save()
+	ok = _check(Farm.animal == 0 and not Farm.is_open(1), "reset_save should close the hen house") and ok
+	ok = _check(_reload_from(saved), "could not reload the saved farm") and ok
+	ok = _check(Farm.animal == 2 and Farm.is_open(1) and Farm.is_open(2) and is_equal_approx(Farm.money, 4321.0), "save/load lost the monkey") and ok
+	ok = _check(Farm.pens[1].get("owned") == hen_owned and Farm.pens[1].get("gold") == 3 and Farm.pens[0].get("gold") == 100, "save/load lost the hen or the cow") and ok
+	# An old save from before the hen (the cow's fields at the top level) still loads.
+	var v1: Dictionary = {"version": 1, "money": 777.0, "total_earned": 5.0e9, "owned": [12, 3], "farmhands": [true],
+		"upgrades": ["warm_hands"], "bells": 25, "total_clicks": 40, "pastures_moved": 2}
+	ok = _check(_reload_from(v1), "could not load a version 1 save") and ok
+	ok = _check(Farm.animal == 0 and Farm.money >= 777.0 and Farm.owned[0] == 12 and Farm.bells == 25 and Farm.pastures_moved == 2
+		and Farm.upgrades.has("warm_hands") and Farm.is_open(1) and not Farm.is_open(2), "a version 1 save did not load into the cow") and ok
+	_apply_animal()
+	ok = _check(critter == cow and cow.visible and tab_btns[0].text == "DAIRY", "back on the cow, the dairy should show") and ok
+	return ok
+
+
+func _read_save() -> Dictionary:
+	var f: FileAccess = FileAccess.open(Farm.save_path, FileAccess.READ)
+	if f == null:
+		return {}
+	var parsed: Variant = JSON.parse_string(f.get_as_text())
+	f.close()
+	return parsed if typeof(parsed) == TYPE_DICTIONARY else {}
+
+
+# Writes d as the save file and loads it.
+func _reload_from(d: Dictionary) -> bool:
+	var f: FileAccess = FileAccess.open(Farm.save_path, FileAccess.WRITE)
+	if f == null:
+		return false
+	f.store_string(JSON.stringify(d))
+	f.close()
+	Farm.load_game()
+	return true
 
 
 # Feeds a synthetic input event through Input, the same path a real device takes (it updates

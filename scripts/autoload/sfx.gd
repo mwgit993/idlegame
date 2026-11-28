@@ -1,7 +1,8 @@
 extends Node
 
 # Sound effects, synthesized at startup into AudioStreamWAVs (no audio files).
-# Sfx.play("squirt"). Names: squirt, coin, buy, cant, milestone, moo, hire, rush, bell, ui.
+# Sfx.play("squirt"). Names: squirt, coin, buy, cant, milestone, moo, hire, rush, bell, ui,
+# and for the hen and the monkey: cluck, pop (an egg is laid), ook, pluck (a banana is picked).
 # "squirt" (the milking squeeze) and "moo" have several takes; play() picks one at random
 # so repeated clicks don't sound like a loop.
 
@@ -31,6 +32,20 @@ func _ready() -> void:
 	_variants["moo"] = [_moo_voice(1.25, 1.0, 5), _moo_voice(1.5, 0.86, 9), _moo_voice(0.85, 1.12, 13)]
 	_streams["moo"] = _variants["moo"][0]
 	_streams["ui"] = _notes([990.0], 0.03, 1, 0.25)
+	_variants["cluck"] = [
+		_voice([Vector4(0.06, 640, 560, 0.7), Vector4(0.06, 660, 580, 0.7), Vector4(0.15, 900, 700, 1.0)], 0.05, 1.6, 3),
+		_voice([Vector4(0.06, 600, 540, 0.6), Vector4(0.13, 820, 640, 1.0)], 0.05, 1.5, 7),
+		_voice([Vector4(0.05, 700, 620, 0.7), Vector4(0.05, 700, 620, 0.7), Vector4(0.05, 720, 640, 0.7)], 0.04, 1.7, 11),
+	]
+	_streams["cluck"] = _variants["cluck"][0]
+	_variants["ook"] = [
+		_voice([Vector4(0.11, 380, 520, 0.1), Vector4(0.11, 420, 560, 0.15), Vector4(0.2, 560, 760, 0.9)], 0.05, 1.0, 5),
+		_voice([Vector4(0.1, 440, 600, 0.15), Vector4(0.18, 600, 820, 0.95)], 0.05, 1.05, 9),
+		_voice([Vector4(0.09, 500, 640, 0.2), Vector4(0.09, 520, 660, 0.2), Vector4(0.09, 540, 680, 0.25)], 0.04, 1.1, 13),
+	]
+	_streams["ook"] = _variants["ook"][0]
+	_streams["pop"] = _blip(900.0, 420.0, 0.07, 0.0)
+	_streams["pluck"] = _blip(760.0, 300.0, 0.09, 0.25)
 
 
 func play(name: String, vol_db: float = -6.0, jitter: float = 0.05) -> void:
@@ -220,6 +235,52 @@ func _moo_voice(length: float, f0_scale: float, seed: int) -> AudioStreamWAV:
 		var env: float = smoothstep(0.0, 0.08, k) * (1.0 - smoothstep(0.8, 1.0, k)) * (0.45 + 0.55 * smoothstep(0.05, 0.45, k))
 		out[i] = v * env
 	return _to_stream(_normalize(out, 0.85))
+
+
+# A little animal voice: syllables of (seconds, start Hz, end Hz, vowel from 0 "oo" to 1 "aa"),
+# each a soft-edged sawtooth through two vowel formants, with `gap` seconds between them.
+# formant_scale > 1 makes a smaller, brighter voice (the hen).
+func _voice(syl: Array[Vector4], gap: float, formant_scale: float, seed: int) -> AudioStreamWAV:
+	var rate: float = float(MIX_RATE)
+	var out: PackedFloat32Array = PackedFloat32Array()
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = seed
+	var f1: BandPass = BandPass.new()
+	var f2: BandPass = BandPass.new()
+	var phase: float = 0.0
+	var src_lp: float = 0.0
+	for sy: Vector4 in syl:
+		var n: int = int(sy.x * rate)
+		for i: int in range(n):
+			var k: float = float(i) / float(n)
+			var f0: float = lerpf(sy.y, sy.z, k) * (1.0 + rng.randf_range(-0.01, 0.01))
+			phase = fmod(phase + f0 / rate, 1.0)
+			src_lp += 0.6 * ((1.0 - 2.0 * phase) - src_lp)
+			var src: float = src_lp + rng.randf_range(-1.0, 1.0) * 0.05
+			if i % 32 == 0:
+				f1.tune(lerpf(350.0, 850.0, sy.w) * formant_scale, 4.0, rate)
+				f2.tune(lerpf(900.0, 1400.0, sy.w) * formant_scale, 5.0, rate)
+			var v: float = f1.process(src) + f2.process(src) * 0.6
+			out.append(v * smoothstep(0.0, 0.12, k) * (1.0 - smoothstep(0.55, 1.0, k)))
+		for g: int in range(int(gap * rate)):
+			out.append(0.0)
+	return _to_stream(_normalize(out, 0.8))
+
+
+# A quick falling blip (an egg popping out, a banana coming off the bunch). noise adds a
+# rustle at the start.
+func _blip(f0: float, f1: float, length: float, noise: float) -> AudioStreamWAV:
+	var out: PackedFloat32Array = PackedFloat32Array()
+	var n: int = int(length * float(MIX_RATE))
+	var phase: float = 0.0
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = 21
+	for i: int in range(n):
+		var t: float = float(i) / float(n)
+		phase = fmod(phase + lerpf(f0, f1, sqrt(t)) / float(MIX_RATE), 1.0)
+		var v: float = sin(phase * TAU) + rng.randf_range(-1.0, 1.0) * noise * (1.0 - t) * (1.0 - t)
+		out.append(v * (1.0 - t) * (1.0 - t) * 0.5)
+	return _to_stream(out)
 
 
 func _normalize(buf: PackedFloat32Array, peak: float) -> PackedFloat32Array:
